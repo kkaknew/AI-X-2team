@@ -68,7 +68,135 @@
 ### 실제로 붙여넣은 것 (원문 그대로, 요약 금지)
 
 ```
-(여기에 붙여넣기)
+[지시]
+메모 검색 기능을 추가해줘. 제목과 본문에서 키워드로 검색된다.
+
+[규약]
+프로젝트 규약
+이 문서는 코드를 작성할 때 지켜야 할 규칙입니다.
+계층 분리
+`routes.js`는 HTTP 요청과 응답만 다룹니다. SQL을 직접 쓰지 않습니다.
+데이터베이스 접근은 `service.js`에만 둡니다.
+응답 형식
+모든 응답은 다음 두 형태 중 하나입니다.
+json
+{ "ok": true,  "data": ... }
+{ "ok": false, "error": "ERROR_CODE" }
+
+에러 코드는 대문자와 밑줄로 씁니다. (예: `MEMO_NOT_FOUND`)
+명명 규칙
+함수명은 동사로 시작합니다. `list`, `get`, `create`, `update`, `remove`
+데이터베이스 컬럼은 스네이크 케이스를 씁니다. `user_id`, `created_at`
+자바스크립트 변수는 카멜 케이스를 씁니다. `userId`, `createdAt`
+입력 검증
+사용자 입력은 반드시 검증합니다.
+검증에 실패하면 400과 함께 `{ ok: false, error }` 를 반환합니다.
+권한
+모든 조회와 수정은 본인 소유 데이터로 한정합니다.
+모든 쿼리에 `user_id` 조건을 포함합니다.
+
+[근거]
+-- memo-seed 데이터베이스 스키마
+
+CREATE TABLE users (
+  id         INTEGER PRIMARY KEY,
+  email      TEXT NOT NULL UNIQUE,
+  name       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE memos (
+  id         INTEGER PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_memos_user ON memos(user_id);
+
+const db = require('./db');
+
+/**
+ * 사용자의 메모 목록을 최신순으로 조회한다.
+ */
+function listMemos(userId) {
+  return db.all(
+    `SELECT id, title, created_at
+       FROM memos
+      WHERE user_id = ?
+      ORDER BY created_at DESC`,
+    [userId]
+  );
+}
+
+/**
+ * 메모 한 건을 조회한다. 본인 메모가 아니면 null을 반환한다.
+ */
+function getMemo(userId, memoId) {
+  return db.get(
+    `SELECT id, title, body, created_at
+       FROM memos
+      WHERE id = ? AND user_id = ?`,
+    [memoId, userId]
+  );
+}
+
+/**
+ * 메모를 생성한다.
+ */
+function createMemo(userId, title, body) {
+  return db.run(
+    `INSERT INTO memos (user_id, title, body, created_at)
+     VALUES (?, ?, ?, datetime('now'))`,
+    [userId, title, body]
+  );
+}
+
+module.exports = { listMemos, getMemo, createMemo };
+
+const express = require('express');
+const service = require('./service');
+
+const router = express.Router();
+
+// 메모 목록 조회
+router.get('/memos', async (req, res) => {
+  const memos = await service.listMemos(req.user.id);
+  res.json({ ok: true, data: memos });
+});
+
+// 메모 단건 조회
+router.get('/memos/:id', async (req, res) => {
+  const memo = await service.getMemo(req.user.id, req.params.id);
+
+  if (!memo) {
+    return res.status(404).json({ ok: false, error: 'MEMO_NOT_FOUND' });
+  }
+
+  res.json({ ok: true, data: memo });
+});
+
+// 메모 생성
+router.post('/memos', async (req, res) => {
+  const { title, body } = req.body;
+
+  if (!title || !body) {
+    return res.status(400).json({ ok: false, error: 'TITLE_AND_BODY_REQUIRED' });
+  }
+
+  const result = await service.createMemo(req.user.id, title, body);
+  res.status(201).json({ ok: true, data: { id: result.lastID } });
+});
+
+module.exports = router;
+
+[종료조건]
+- GET /memos/search?q=키워드 로 호출된다
+- 제목 또는 본문에 키워드가 포함된 메모만 반환한다
+- 본인 메모만 반환한다
+- q가 비어 있으면 400과 { ok: false, error } 를 반환한다
 ```
 
 > 요약하지 마세요. 나중에 이 기록이 무엇이 결과를 만들었는지 확인하는 근거가 됩니다.
@@ -76,17 +204,29 @@
 ---
 
 ## 3. 결과 확인
-
+A조
 | | 확인 항목 | 결과 |
 | :-: | :-- | :-- |
-| ① | 실행 성공까지 걸린 시간 | 분 |
-| ② | 없는 함수·컬럼을 지어낸 개수 | 개 |
+| ① | 실행 성공까지 걸린 시간 | 10분 |
+| ② | 없는 함수·컬럼을 지어낸 개수 | 0개 |
 | | → 지어낸 이름 | |
-| ③ | `CONVENTIONS.md` 위반 개수 | 개 |
+| ③ | `CONVENTIONS.md` 위반 개수 | 확인불가/ 규약 미제공 |
 | | → 무엇을 어겼는가 | |
-| ④ | 사람이 직접 고친 지점 | 곳 |
+| ④ | 사람이 직접 고친 지점 | 0곳 |
 | | → 어디를 어떻게 | |
-| ⑤ | **본인 메모만 반환되는가** | 예 / 아니오 |
+| ⑤ | **본인 메모만 반환되는가** | 아니오 |
+
+B조
+| | 확인 항목 | 결과 |
+| :-: | :-- | :-- |
+| ① | 실행 성공까지 걸린 시간 | 5분 |
+| ② | 없는 함수·컬럼을 지어낸 개수 | 0개 |
+| | → 지어낸 이름 | |
+| ③ | `CONVENTIONS.md` 위반 개수 | 0개 |
+| | → 무엇을 어겼는가 | |
+| ④ | 사람이 직접 고친 지점 | 0곳 |
+| | → 어디를 어떻게 | |
+| ⑤ | **본인 메모만 반환되는가** | 예 |
 
 ### ⑤번을 반드시 확인하세요
 
@@ -103,19 +243,19 @@
 **4-1. 두 결과의 가장 큰 차이는 무엇입니까?**
 
 ```
-
+A조는 본인 메모가 반환되지 않고, B조는 본인 메모가 반환되어집니다.
 ```
 
 **4-2. A조의 실패는 모델 탓입니까, 우리가 주지 않은 탓입니까? 근거를 들어 적으세요.**
 
 ```
-
+우리가 주지 않은 탓입니다. A조의 프롬프트에서는 `CONVENTIONS.md` 규약을 제공하지 않았기 때문에 실패했습니다
 ```
 
 **4-3. B조가 준 자료 중 결과를 가장 크게 바꾼 것 하나를 꼽는다면 무엇입니까? 왜 그렇게 생각합니까?**
 
 ```
-
+권한입니다. 무엇이란 질문이 아니라 어떻게 라는 확답을 지시했기 때문입니다.
 ```
 
 ---
