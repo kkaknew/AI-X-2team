@@ -2,8 +2,8 @@
 
 **팀 규칙 세우기 / Setting team rules**
 
-- 작성일 / Date: 
-- 참여자 / Present: 
+- 작성일 / Date: 2026-09-11
+- 참여자 / Present: 박정현, 권영인, 김현수, 임준완
 - 최종 반영 / Feeds into: docs/team-rules.md
 
 ---
