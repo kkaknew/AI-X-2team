@@ -5,7 +5,7 @@ Principle: record your **reasoning**, not just prompts.
 
 ---
 
-## [이슈 #_1_] 제목 / Title
+## [이슈 #_1_] 제목 / Title : 초안뽑기
 
 **목표(스펙) / Spec**
 - 입력 Input: EARS 구문을 이용해서 적어야하는데 너가 초안 작성에 도움을 주었으면 해
