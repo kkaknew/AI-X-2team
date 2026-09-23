@@ -36,7 +36,7 @@ At least two normal paths + one failure path. If "How to check" is empty, it is 
 > 확인할 동작이 더 있으면 AC-4부터 행을 추가해 쓰십시오.
 > If there are more behaviors to check, add rows from AC-4.
 
-- [O] 이번 활동에서 AI를 사용했다면 `PROMPTS.md`에 기록했습니다 / Logged any AI use in `PROMPTS.md`
+- [O] 이번 활동에서 AI를 사용했다면 `PROMPTS_04.md`에 기록했습니다 / Logged any AI use in `PROMPTS_04.md`
 
 ---
 
