@@ -56,8 +56,8 @@ flowchart TD
     T3 --> T1
 ```
 
-- 지금 착수 가능 (진입 차수 0) / Can start now (in-degree 0): 
-- 작업 순서 (위상정렬) / Work order (topological sort): 
+- 지금 착수 가능 (진입 차수 0) / Can start now (in-degree 0): #2,#4
+- 작업 순서 (위상정렬) / Work order (topological sort): #2,#4 -> #3-> #1
 - 사이클이 있었다면 어떻게 풀었는가 / If there was a cycle, how did you fix it?: 
 
 ---
