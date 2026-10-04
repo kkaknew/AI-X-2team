@@ -43,7 +43,7 @@
   *You can also give the task table to AI and ask "Convert this into a Mermaid graph."*
 - 어려우면 종이에 그려 사진을 `docs/images/`에 올리고 `![DAG](images/week-05-dag.jpg)`로 넣어도 됩니다.
   *Or draw it on paper, upload the photo to `docs/images/` and link it with `![DAG](images/week-05-dag.jpg)`.*
-
+'''
 flowchart TD
     T2["#2 앱화면에서 on/off를 통한 앱 통제<br/>완료: 앱내에서 on/off기능이 작동함<br/>담당: 김현수"]
     T4["#4 앱내 설정에서 작동 시각과 사용시간 설정<br/>완료: 작동시각과 사용시간을 변경할 수 있는가<br/>담당: 임준완"]
@@ -53,7 +53,7 @@ flowchart TD
     T2 --> T3
     T4 --> T3
     T3 --> T1
-
+'''
 - 지금 착수 가능 (진입 차수 0) / Can start now (in-degree 0): 
 - 작업 순서 (위상정렬) / Work order (topological sort): 
 - 사이클이 있었다면 어떻게 풀었는가 / If there was a cycle, how did you fix it?: 
