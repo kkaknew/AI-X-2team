@@ -68,25 +68,25 @@ flowchart TD
 
 핵심 시나리오 1개가 끝까지 동작하는 데 필요한 것만 / *Only what the core scenario needs to work end-to-end*
 
-- 핵심 시나리오 / Core scenario: 
+- 핵심 시나리오 / Core scenario: 화면 밝기가 줄이는 것이 없다면 앱의 기능이 없음
 
 
 
 ### Should (없을 경우에는 작성하지 마세요)
  
- - 시나리오
+ - 시나리오 : 작동시각과 사용시간을 변경하는 기능이 없어도 차체적으로 사용시간에 비례해 줄어들 수 있음
 
 
 
 ### Could (없을 경우에는 작성하지 마세요)
 
- - 시나리오
+ - 시나리오 : 유튜브랑 인스타 사용시에만 화면 밝기 기능 작동
 
 ### **Won't — 이번 학기에 안 함 / not this semester**
 
 | Won't 항목 Item | 포기한 이유 Why |
 |---|---|
-|  |  |
+| 유튜브 쇼츠 인스타 릴스를 정확히 확인하는 것 | 구분하는 것을 구현하는 알고리즘이 짧은 시간내 만들어 지기 힘들다. |
 |  |  |
 
 ### 실행 가능성 확인 / Feasibility check
