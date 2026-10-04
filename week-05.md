@@ -44,7 +44,15 @@
 - 어려우면 종이에 그려 사진을 `docs/images/`에 올리고 `![DAG](images/week-05-dag.jpg)`로 넣어도 됩니다.
   *Or draw it on paper, upload the photo to `docs/images/` and link it with `![DAG](images/week-05-dag.jpg)`.*
 
+flowchart TD
+    T2["#2 앱화면에서 on/off를 통한 앱 통제<br/>완료: 앱내에서 on/off기능이 작동함<br/>담당: 김현수"]
+    T4["#4 앱내 설정에서 작동 시각과 사용시간 설정<br/>완료: 작동시각과 사용시간을 변경할 수 있는가<br/>담당: 임준완"]
+    T3["#3 숏폼 이용 시각과 이용시간을 융합하여 작동여부 확인<br/>완료: 설정된 시각에 사용자의 이용시간을 측정하는가<br/>담당: 권영인"]
+    T1["#1 화면 밝기 줄이기<br/>완료: 화면 밝기가 줄음<br/>담당: 박정현"]
 
+    T2 --> T3
+    T4 --> T3
+    T3 --> T1
 
 - 지금 착수 가능 (진입 차수 0) / Can start now (in-degree 0): 
 - 작업 순서 (위상정렬) / Work order (topological sort): 
