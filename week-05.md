@@ -93,9 +93,10 @@ flowchart TD
 
 - 특수 장비·유료 API·실제 개인정보가 필요한가? 필요하다면 대안은?
   *Does it need special hardware, paid APIs or real personal data? If so, what is the alternative?*
+  없다
 - 15주차에 발표장에서 시연할 수 있는 형태인가?
   *Can it be demonstrated live in Week 15?*
-
+  예
 ---
 
 ## ④ 가장 먼저 동작시킬 흐름 (Walking Skeleton) / First end-to-end flow
