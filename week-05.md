@@ -44,11 +44,7 @@
 - 어려우면 종이에 그려 사진을 `docs/images/`에 올리고 `![DAG](images/week-05-dag.jpg)`로 넣어도 됩니다.
   *Or draw it on paper, upload the photo to `docs/images/` and link it with `![DAG](images/week-05-dag.jpg)`.*
 
-```mermaid
-graph LR
-  T1["#1 태스크명"] --> T3["#3 태스크명"]
-  T2["#2 태스크명"] --> T3
-```
+![DAG](images/week-05-dag.png)
 
 - 지금 착수 가능 (진입 차수 0) / Can start now (in-degree 0): 
 - 작업 순서 (위상정렬) / Work order (topological sort): 
