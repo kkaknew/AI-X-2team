@@ -30,8 +30,8 @@ At least two normal paths + one failure path. If "How to check" is empty, it is 
 |---|---|---|---|
 | *예시* | *정상* | *WHEN 학생이 과제 목록을 열면 THE 시스템은 SHALL 과목별 미제출 과제를 마감일 순으로 표시한다* | *미제출 과제 3건을 만든 뒤 목록을 열어 마감일 순으로 나오는지 확인* |
 | AC-1 | 정상 Normal | WHEN 미션을 수행하면 THE 시스템은 SHALL 화분에 물을 주게 됨 | 화분 데이터에 점수가 1점 오름|
-| AC-2 | 정상 Normal | WHILE 작동시간을 선택 THE 시스템은 SHALL 작동시간동안 채도를 낮춰서 최종적으로 흑백화면이 되도록한다 | 작동시간을 5분으로 둔 후 5분안에 채도가 빠지는지 확인 |
-| AC-3 | 실패 Failure | IF 취침 시작 시간 설정값이 현재 시간보다 이전이면  THEN THE 시스템은 SHALL 설정을 저장하고 설정시간이 현재시각보다 이르다는 알림을 띄우고 다음날 부터 작동 | 현재시간보다 10분 이전 시간으로 설정한 후 알림이 오는지 확인 |
+| AC-2 | 정상 Normal | WHILE 특정 시간이되면 THE 시스템은 SHALL 팝업알림을 띄운다. | 작동시간을 5분으로 둔 후 5분뒤 팝업알림이 뜸 |
+| AC-3 | 실패 Failure | IF 미션을 3일간 수행하지 않으면  THEN THE 시스템은 SHALL 화분 데이터 점수가 0으로 내려감 | 30분으로 잡고 화분데이터를 관측했을 경우 화분데이터 점수가 0점임 |
 
 > 확인할 동작이 더 있으면 AC-4부터 행을 추가해 쓰십시오.
 > If there are more behaviors to check, add rows from AC-4.
