@@ -9,8 +9,8 @@
 
 ## ① 주제 확정 / Confirm topic
 
-- 확정 주제 / Topic: 숏폼중독문제 해결을 위한 시스템
-- 이유 / Reason: 최근 숏폼중독으로 인한 수면부족으로 일상생활에 지장이 가는 비율이 증가하였기 때문에
+- 확정 주제 / Topic: 긍정적인 도파민이 나올 수 있도록 도와주는 프로그램
+- 이유 / Reason: 스마트폰 과의존 위험에서 벗어나 산책, 명상 등의 건강한 활동으로 긍정적인 도파민을 얻도록 돕고, 나무를 기르는 성취감을 통해 좋은 습관을 형성하기 위함
 
 ---
 
@@ -20,7 +20,7 @@
 
 4주차 사용자 스토리와 완료 조건을 태스크로 나눕니다.
 *Break down your Week 4 user stories and acceptance criteria into tasks.*
-
+x
 각 태스크는 따로 끝내도 맞는지 확인할 수 있어야 합니다. 담당에 '다 같이'는 쓰지 않습니다.
 *Each task must be checkable on its own. Do not write "everyone" as owner.*
 
