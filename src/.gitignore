@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# native folders (expo prebuild로 생성)
+/ios
+/android
+
+# misc
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.env*.local
+npm-debug.*
+yarn-error.*
+.DS_Store
