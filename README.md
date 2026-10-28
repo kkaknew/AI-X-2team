@@ -7,16 +7,18 @@
 
 ## 실행 방법
 
-[Flutter SDK](https://docs.flutter.dev/get-started/install)를 설치한 뒤:
+[Node.js](https://nodejs.org/)(LTS)를 설치하고, 휴대폰에 **Expo Go** 앱(Play 스토어/App Store)을 설치한 뒤:
 
 ```bash
 cd src
-flutter create .   # 처음 한 번만: android/ios 폴더 생성
-flutter pub get
-flutter run
+npm install
+npx expo start
 ```
 
-테스트: `flutter test`
+터미널에 나오는 QR 코드를 Expo Go 앱(아이폰은 카메라 앱)으로 찍으면 휴대폰에서 앱이 실행됩니다.
+컴퓨터와 휴대폰이 같은 Wi-Fi에 연결되어 있어야 합니다.
+
+테스트: `npm test` / 타입 검사: `npm run typecheck`
 
 ## 문서
 

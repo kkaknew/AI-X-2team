@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "도파민 나무",
+    "slug": "dopamine-tree",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light"
+  }
+}

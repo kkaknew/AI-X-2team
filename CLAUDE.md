@@ -6,7 +6,7 @@
 ## 저장소 구조
 
 - `week-NN.md`: 주차별 팀 활동지 (명세·설계·이슈의 원본)
-- `src/`: Flutter 앱
+- `src/`: React Native(Expo, TypeScript) 앱
 - `ETHICS.md`: 개인정보·윤리 관련 판단 기록
 - `PROMPTS_*.md`: AI 협업 기록
 
@@ -14,26 +14,26 @@
 
 ```bash
 cd src
-flutter create .        # 처음 한 번: android/ios 플랫폼 폴더 생성 (lib/는 덮어쓰지 않음)
-flutter pub get
-flutter run
-flutter test
+npm install
+npx expo start      # 휴대폰의 Expo Go 앱으로 QR 코드를 찍어 실행
+npm test            # 계층 규칙 테스트
+npm run typecheck   # TypeScript 타입 검사
 ```
 
 ## 아키텍처: 3계층
 
-의존 방향은 표현 → 로직 → 데이터, 한 방향만 허용한다. `test/architecture_test.dart`가 이를 검사한다.
+의존 방향은 표현 → 로직 → 데이터, 한 방향만 허용한다. `src/__tests__/architecture.test.ts`가 이를 검사한다.
 
 | 계층 | 폴더 | 모듈 | 의존하지 않는 것 |
 |---|---|---|---|
-| 표현 | `lib/presentation/` | `ActivityScreen`, `TreeScreen`, `HistoryScreen` | 인증 규칙, 성장·시듦 규칙, 데이터 출처 |
-| 로직 | `lib/logic/` | `ActivityVerifier`, `WateringEngine`, `WiltingChecker`, `StatsService`, `ReminderService` | 화면 종류, 저장 방식, 푸시 서비스 종류 |
-| 데이터 | `lib/data/` | `LocationRepository`, `LocalStore`, `ActivityRepository`, `TreeRepository`, `PushClient` | 인증 규칙, 성장·시듦 규칙, 화면 구성 |
+| 표현 | `src/presentation/` | `ActivityScreen`, `TreeScreen`, `HistoryScreen` | 인증 규칙, 성장·시듦 규칙, 데이터 출처 |
+| 로직 | `src/logic/` | `ActivityVerifier`, `WateringEngine`, `WiltingChecker`, `StatsService`, `ReminderService` | 화면 종류, 저장 방식, 푸시 서비스 종류 |
+| 데이터 | `src/data/` | `LocationRepository`, `LocalStore`, `ActivityRepository`, `TreeRepository`, `PushClient` | 인증 규칙, 성장·시듦 규칙, 화면 구성 |
 
 - 활동 인증 규칙(산책 거리·속도, 명상 중 조작, 독후감 분량)은 `ActivityVerifier` 안에만 둔다.
 - `WateringEngine`은 "인증된 활동 1건"만 받는다. 어떤 활동인지 몰라도 된다.
 - `WiltingChecker`는 물주기와 실행 시점·변경 이유가 달라 별도 모듈이다.
-- DB 종류, 푸시 서비스 종류는 데이터 계층 구현 안에 숨긴다. 로직 계층은 추상 클래스만 안다.
+- DB 종류, 푸시 서비스 종류는 데이터 계층 구현 안에 숨긴다. 로직 계층은 인터페이스만 안다.
 
 ## 활동 인증 규칙 (수치는 팀에서 확정 전)
 
