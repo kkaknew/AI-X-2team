@@ -6,6 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "산책 거리와 시간을 재기 위해 위치를 사용합니다. 경로는 기기 밖으로 보내지 않습니다."
+        }
+      ],
       "expo-status-bar"
     ]
   }
