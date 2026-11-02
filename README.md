@@ -36,7 +36,7 @@ npx expo start
 - 안드로이드: Expo Go 앱의 "Scan QR code"
 - 아이폰: 기본 카메라 앱
 
-컴퓨터와 휴대폰이 **같은 Wi-Fi**에 있어야 합니다. 학교 Wi-Fi처럼 연결이 안 되면 `npx expo start --tunnel`로 실행하세요.
+컴퓨터와 휴대폰이 **같은 Wi-Fi**에 있어야 합니다. 학교 Wi-Fi처럼 연결이 안 되면 `npx expo start --tunnel ngrok`로 실행하세요 (`--tunnel`만 쓰면 Expo 계정 로그인이 필요합니다).
 하단에 "나무 / 활동 기록 / 기록 조회" 탭이 보이면 성공입니다.
 
 ## 다음부터 실행하기
@@ -61,6 +61,9 @@ npx expo start
 | `... is not installed` 같은 패키지 없음 오류 | `src`에서 `npm install` 다시 실행 |
 | `npm warn`, `vulnerabilities` 경고 | 무시해도 됩니다. `npm audit fix --force`는 실행하지 마세요 (Expo 버전이 깨짐) |
 | Expo Go에서 "SDK 버전이 맞지 않음" | Expo Go 앱을 최신 버전으로 업데이트 |
+| 휴대폰에 앱이 안 뜨고 터미널에 `No apps connected` | 같은 Wi-Fi인지 확인. 그래도 안 되면 `npx expo start --tunnel ngrok` |
+| 휴대폰 파란 화면 `Cannot find native module ...` | `npx expo install --check`로 버전을 맞추고, `npx expo start -c`로 캐시를 지운 뒤 다시 실행 |
+| 앱이 열리면 터미널에 `[DB] DB v1 \| users 1, ...`가 찍힘 | 정상입니다. 휴대폰 안에 DB가 만들어졌다는 뜻 |
 | Visual Studio 솔루션 탐색기에 파일이 안 보임 | "새 프로젝트"가 아니라 파일 → 열기 → 폴더로 `AI-X-2team` 폴더를 엽니다 |
 
 ## 작업하고 올리기
