@@ -16,7 +16,7 @@
 cd src
 npm install
 npx expo start      # 휴대폰의 Expo Go 앱으로 QR 코드를 찍어 실행
-npm test            # 계층 규칙 테스트
+npm test            # 계층 규칙 + DB 스키마 테스트
 npm run typecheck   # TypeScript 타입 검사
 ```
 
@@ -34,6 +34,16 @@ npm run typecheck   # TypeScript 타입 검사
 - `WateringEngine`은 "인증된 활동 1건"만 받는다. 어떤 활동인지 몰라도 된다.
 - `WiltingChecker`는 물주기와 실행 시점·변경 이유가 달라 별도 모듈이다.
 - DB 종류, 푸시 서비스 종류는 데이터 계층 구현 안에 숨긴다. 로직 계층은 인터페이스만 안다.
+- `App.tsx`는 계층을 조립하는 시작점이라 예외적으로 데이터 계층(DB 초기화)을 직접 부른다. 화면 파일은 그러면 안 된다.
+
+## 데이터 저장: 기기 내 SQLite
+
+- 서버 DB는 쓰지 않는다. 모든 데이터는 휴대폰 안의 SQLite(`expo-sqlite`, 파일 `dopamine-tree.db`)에 저장한다.
+- 스키마와 초기 데이터: `src/data/schema.ts`. 앱(`database.ts`)과 테스트(`__tests__/schema.test.ts`, Node 내장 `node:sqlite`)가 같은 SQL을 쓴다.
+- 테이블 6개: `users`, `growth_stages`, `activity_types`, `trees`, `activity_logs`, `reminders`
+- 활동별 인증 기준은 `activity_types.rule`(JSON)에 둔다. 판정은 `ActivityVerifier`가 이 값을 읽어서 한다.
+- 스키마 변경은 `MIGRATIONS` 배열 끝에 새 SQL을 추가한다. 기존 항목은 고치지 않는다 (이미 설치된 앱은 `PRAGMA user_version`으로 적용 여부를 기억).
+- 알림(리마인더, 시듦 경고)도 서버 푸시가 아니라 기기 로컬 알림으로 예약한다.
 
 ## 활동 인증 규칙 (수치는 팀에서 확정 전)
 
@@ -46,8 +56,8 @@ npm run typecheck   # TypeScript 타입 검사
 
 ## 개인정보 원칙
 
-- GPS 경로 좌표, 일기·독후감 본문은 기기에만 저장한다. 서버로 보내지 않는다.
-- 서버에는 결과만 올린다 (예: "산책 2.1km, 35분, 인증됨", "독후감 작성, 312자").
+- 지금은 서버가 없어 모든 데이터가 기기에만 저장된다.
+- 나중에 공유·동기화 기능을 넣더라도 GPS 경로 좌표, 일기·독후감 본문은 기기 밖으로 보내지 않는다. 결과만 보낸다 (예: "산책 2.1km, 35분, 인증됨", "독후감 작성, 312자").
 
 ## 작업 규칙
 
