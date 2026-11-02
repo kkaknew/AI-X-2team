@@ -1,7 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { describeDatabase } from './data/database';
 import ActivityScreen from './presentation/ActivityScreen';
 import HistoryScreen from './presentation/HistoryScreen';
 import TreeScreen from './presentation/TreeScreen';
@@ -12,9 +13,18 @@ const TABS = [
   { key: 'history', label: '기록 조회', Screen: HistoryScreen },
 ] as const;
 
-/** 하단 탭으로 세 화면을 오가는 뼈대. */
+/**
+ * 앱 시작점. 하단 탭으로 세 화면을 오간다.
+ * App.tsx는 계층을 조립하는 곳이라 데이터 계층(DB 초기화)을 직접 불러도 된다.
+ */
 export default function App() {
   const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    describeDatabase()
+      .then((summary) => console.log(`[DB] ${summary}`))
+      .catch((e) => console.error('[DB] 초기화 실패', e));
+  }, []);
   const { Screen } = TABS[index];
 
   return (
