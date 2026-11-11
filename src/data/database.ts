@@ -34,6 +34,22 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
+/**
+ * 활동 종류 1개의 인증 기준(rule JSON 문자열)과 물 보상.
+ * 판정과 물주기는 로직 계층이 한다. 여기서는 값만 읽어 준다.
+ */
+export async function getActivityType(
+  code: string,
+): Promise<{ rule: string; waterReward: number }> {
+  const db = await openAppDatabase();
+  const row = await db.getFirstAsync<{ rule: string; water_reward: number }>(
+    'SELECT rule, water_reward FROM activity_types WHERE code = ?',
+    code,
+  );
+  if (!row) throw new Error(`활동 종류(${code})를 찾을 수 없습니다`);
+  return { rule: row.rule, waterReward: row.water_reward };
+}
+
 /** 개발 중 확인용: 테이블별 행 개수 */
 export async function describeDatabase(): Promise<string> {
   const db = await openAppDatabase();

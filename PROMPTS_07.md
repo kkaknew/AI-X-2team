@@ -112,4 +112,36 @@ GitHub 이슈 #7 (활동지 번호 5)
 - 팀에서 정할 것: 시든 나무에 물을 주면 회복되는지(#17과 함께 결정)
 
 ---
+## [이슈 #_8_] 제목 / Title : [6] 활동 기록 화면
+
+GitHub 이슈 #8 (활동지 번호 6)
+
+**목표(스펙) / Spec**
+- 입력 Input: 이슈 완료 조건, `CLAUDE.md`(3계층 규칙: 화면은 데이터 계층을 직접 부르지 않는다), #6 활동 인증 규칙(`ActivityVerifier`), #5 GPS 산책(`LocationRepository`), #7 물주기(`WateringEngine`)
+- 처리 Processing: AI에게 활동 기록 화면과 테스트 초안을 요청하고, 휴대폰(Expo Go)에서 실행해 본 뒤 직접 커밋·PR
+- 출력 Output: `src/presentation/ActivityScreen.tsx`, `src/logic/ActivityRecorder.ts`, `src/__tests__/ActivityRecorder.test.ts`, `src/data/database.ts`(`getActivityType` 추가), `src/App.tsx`(조립)
+- 실패 조건 Failure: 활동 5종 중 기록할 수 없는 것이 있거나, 인증 성공·실패 결과가 화면에 표시되지 않으면 실패
+
+**요청한 프롬프트 요지 / Prompt (summary)**
+- 이슈 6번 활동 기록 화면을 만들어 달라. GitHub에는 내가 직접 올릴 것이니 코드는 올리지 말 것
+
+**결과에 대한 판단 / Decisions**
+- 채택한 부분과 이유 / Accepted, because:
+  - 화면이 DB·GPS를 직접 부르지 않고 로직 계층의 `ActivityRecorder`만 쓰는 구조. architecture 테스트(표현 → 데이터 직접 import 금지)를 지키기 때문
+  - 인증 기준 수치를 화면이 모르고 `ActivityVerifier`의 결과(`verified`, `reasons`)만 보여주는 것. 기준이 바뀌어도 화면은 고칠 필요가 없기 때문
+  - 일기·독후감은 글자 수만 넘기고 본문은 저장하지 않는 것. `ETHICS.md` 원칙과 맞고, 본문 저장은 #10, #12 범위이기 때문
+  - 인증되면 `water_reward`만큼 `WateringEngine.water()`로 물을 주는 것. 나무 화면(#9)이 바로 갱신되기 때문
+- 수정한 부분과 이유 / Changed, because:
+  - 명상은 정해진 클래식 음악 재생이 #11 범위라, 지금은 60초 타이머로 대신하고 조작·앱 이탈 여부만 기록함
+  - 수면 시각 입력은 날짜 선택 패키지를 추가하지 않고 "시:분" 글자 입력으로 함
+- 폐기한 부분과 이유 / Rejected, because:
+  - (팀 검토 후 작성)
+
+**검증 방법 / How it was verified**
+- `npm test`: `ActivityRecorder` 테스트 포함 전체 76개 통과 (`pass 76`, `fail 0`)
+- 완료 조건 대응 테스트: 활동 5종(산책·일기·명상·독서·수면) 각각 인증 성공·실패 결과, "평균 시속 7km 초과 산책은 실패 결과가 나온다", "인증되면 보상만큼 물을 준다"
+- 휴대폰(Expo Go)에서 활동 기록 탭 실행 확인: (직접 확인 후 작성)
+- 팀에서 정할 것: 기록(activity_logs) 저장은 #14 기록 조회 화면과 함께 붙일지
+
+---
 (이슈 단위로 반복 / repeat per issue)
