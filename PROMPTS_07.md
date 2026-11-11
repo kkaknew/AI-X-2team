@@ -81,4 +81,35 @@ GitHub 이슈 #3 (활동지 번호 1), PR #1, #2
 - PR #1, #2에서 변경 파일을 확인한 뒤 직접 merge, `git pull`로 main이 최신 상태인지 확인
 
 ---
+## [이슈 #_7_] 제목 / Title : [5] 물주기
+
+GitHub 이슈 #7 (활동지 번호 5)
+
+**목표(스펙) / Spec**
+- 입력 Input: 이슈 완료 조건, `CLAUDE.md`(3계층 규칙, "WateringEngine은 인증된 활동 1건만 받는다"), #4 DB 스키마(`growth_stages`, `trees`), #6 활동 인증 결과(`verified`)
+- 처리 Processing: AI에게 물주기 로직과 테스트 초안을 요청하고, 생성된 파일을 로컬에서 테스트한 뒤 직접 커밋·PR
+- 출력 Output: `src/logic/WateringEngine.ts`, `src/data/TreeRepository.ts`(인터페이스), `src/data/SqliteTreeRepository.ts`(SQLite 구현), `src/__tests__/WateringEngine.test.ts`
+- 실패 조건 Failure: 인증 1건당 보상만큼 물이 쌓이지 않거나, 기준량에 도달해도 단계가 바뀌지 않으면 실패
+
+**요청한 프롬프트 요지 / Prompt (summary)**
+- 이슈 5번 물주기를 만들어 달라. GitHub에는 내가 직접 올릴 수 있게 파일로 달라
+
+**결과에 대한 판단 / Decisions**
+- 채택한 부분과 이유 / Accepted, because:
+  - 물주기 엔진이 활동 종류를 모르고 `verified`와 `waterReward`만 받는 구조. `CLAUDE.md`의 계층 규칙대로 인증 규칙이 바뀌어도 물주기는 고칠 필요가 없기 때문
+  - 단계 기준량을 코드가 아니라 DB(`growth_stages.water_required`)에서 읽는 것. 팀이 수치를 확정하면 DB만 바꾸면 되기 때문
+  - 물을 줄 때 `last_watered_at`을 저장하는 것. 시듦 판정(#17)에서 그대로 쓸 수 있기 때문
+  - SQLite 구현이 expo-sqlite를 직접 import하지 않고 필요한 메서드만 받는 구조. Node 내장 SQLite로 같은 SQL을 테스트할 수 있기 때문
+- 수정한 부분과 이유 / Changed, because:
+  - 기존 `WateringEngine` 뼈대는 `ActivityRepository`도 받았는데 물주기에는 필요 없어 `TreeRepository`만 받도록 바꿈
+  - 마지막 단계 도달 시 완료 처리·새 씨앗은 #16 이슈 범위라, 여기서는 `isFinalStage`로 알려주기만 함
+- 폐기한 부분과 이유 / Rejected, because:
+  - (팀 검토 후 작성)
+
+**검증 방법 / How it was verified**
+- 로컬에서 `npm test` 실행: 물주기 테스트 14개 포함 전체 54개 통과 (`pass 54`, `fail 0`)
+- 완료 조건 대응 테스트: "인증 1건당 보상만큼 물이 쌓인다", "기준량(10)에 딱 도달하면 새싹으로 바뀐다", "씨앗 → 새싹 → 묘목 → 어린 나무 → 나무 순서로 자란다"
+- 팀에서 정할 것: 시든 나무에 물을 주면 회복되는지(#17과 함께 결정)
+
+---
 (이슈 단위로 반복 / repeat per issue)
