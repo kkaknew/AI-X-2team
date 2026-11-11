@@ -1,4 +1,4 @@
-import type { GrowthStage, TreeRepository } from '../data/TreeRepository';
+import type { GrowthStage, TreeRepository, TreeStatus } from '../data/TreeRepository';
 
 /**
  * 로직 계층: 인증된 활동 1건당 물을 주고 성장 단계를 올린다. (#7 [5] 물주기)
@@ -12,6 +12,7 @@ import type { GrowthStage, TreeRepository } from '../data/TreeRepository';
  * - 마지막 단계에 도달한 뒤 나무를 완료 처리하고 새 씨앗을 심는 것은 #16 [14]에서 한다.
  *   여기서는 isFinalStage로 알려주기만 한다.
  * - 물을 줄 때마다 last_watered_at을 갱신한다. 시듦 판정(#17 [15])이 이 값을 쓴다.
+ * - 나무 화면(#9 [7])은 getProgress()로 지금 상태를 읽고, subscribe()로 물을 준 직후 새 상태를 받는다.
  */
 
 /** 물주기에 넣는 값. 활동 종류나 원본 데이터는 들어오지 않는다. */
@@ -40,6 +41,24 @@ export interface WateringResult {
   waterToNextStage: number;
 }
 
+/** 나무 화면에 보여줄 지금 나무 상태 */
+export interface TreeProgress {
+  treeId: number;
+  status: TreeStatus;
+  waterTotal: number;
+  stage: GrowthStage;
+  /** 지금 단계가 몇 번째인가 (1부터) */
+  stageNumber: number;
+  stageCount: number;
+  isFinalStage: boolean;
+  /** 다음 단계. 마지막 단계면 null */
+  nextStage: GrowthStage | null;
+  /** 다음 단계까지 남은 물. 마지막 단계면 0 */
+  waterToNextStage: number;
+}
+
+export type TreeProgressListener = (progress: TreeProgress) => void;
+
 export class WateringError extends Error {
   constructor(message: string) {
     super(message);
@@ -62,11 +81,51 @@ function sortStages(stages: GrowthStage[]): GrowthStage[] {
   return [...stages].sort((a, b) => a.waterRequired - b.waterRequired || a.id - b.id);
 }
 
+/** @param sortedStages sortStages()로 정렬한 단계 */
+function progressOf(
+  tree: { id: number; status: TreeStatus; waterTotal: number },
+  sortedStages: GrowthStage[],
+): TreeProgress {
+  const stage = stageForWater(tree.waterTotal, sortedStages);
+  const index = sortedStages.findIndex((s) => s.id === stage.id);
+  const nextStage = index < sortedStages.length - 1 ? sortedStages[index + 1] : null;
+  return {
+    treeId: tree.id,
+    status: tree.status,
+    waterTotal: tree.waterTotal,
+    stage,
+    stageNumber: index + 1,
+    stageCount: sortedStages.length,
+    isFinalStage: nextStage === null,
+    nextStage,
+    waterToNextStage: nextStage ? nextStage.waterRequired - tree.waterTotal : 0,
+  };
+}
+
 export class WateringEngine {
   private readonly trees: TreeRepository;
+  private readonly listeners = new Set<TreeProgressListener>();
 
   constructor(trees: TreeRepository) {
     this.trees = trees;
+  }
+
+  /** 지금 키우는 나무의 상태. 키우는 나무가 없으면 null */
+  async getProgress(): Promise<TreeProgress | null> {
+    const tree = await this.trees.getActiveTree();
+    if (!tree) return null;
+    return progressOf(tree, sortStages(await this.trees.getStages()));
+  }
+
+  /**
+   * 물을 준 직후 새 나무 상태를 받는다. 인증되지 않아 물을 주지 않았으면 부르지 않는다.
+   * @returns 구독을 끊는 함수
+   */
+  subscribe(listener: TreeProgressListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   /**
@@ -97,8 +156,8 @@ export class WateringEngine {
       });
     }
 
-    const index = stages.findIndex((s) => s.id === stage.id);
-    const nextStage = index < stages.length - 1 ? stages[index + 1] : null;
+    const progress = progressOf({ ...tree, waterTotal }, stages);
+    if (waterGiven > 0) this.notify(progress);
 
     return {
       treeId: tree.id,
@@ -107,9 +166,20 @@ export class WateringEngine {
       previousStage,
       stage,
       stageChanged: stage.id !== previousStage.id,
-      isFinalStage: nextStage === null,
-      nextStage,
-      waterToNextStage: nextStage ? nextStage.waterRequired - waterTotal : 0,
+      isFinalStage: progress.isFinalStage,
+      nextStage: progress.nextStage,
+      waterToNextStage: progress.waterToNextStage,
     };
+  }
+
+  /** 화면 쪽 오류 때문에 이미 저장된 물주기가 실패로 보이지 않도록, 구독자 오류는 기록만 한다 */
+  private notify(progress: TreeProgress): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(progress);
+      } catch (e) {
+        console.error('[WateringEngine] 구독자 오류', e);
+      }
+    }
   }
 }
