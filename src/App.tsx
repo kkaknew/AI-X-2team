@@ -1,17 +1,22 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { describeDatabase } from './data/database';
+import { describeDatabase, openAppDatabase } from './data/database';
+import { SqliteTreeRepository } from './data/SqliteTreeRepository';
+import { WateringEngine } from './logic/WateringEngine';
 import ActivityScreen from './presentation/ActivityScreen';
 import HistoryScreen from './presentation/HistoryScreen';
-import TreeScreen from './presentation/TreeScreen';
+import TreeScreen, { type TreeScreenProps } from './presentation/TreeScreen';
 
-const TABS = [
+/** 모든 화면에 같은 로직 객체를 넘긴다. 쓰지 않는 화면은 무시한다 */
+type ScreenProps = TreeScreenProps;
+
+const TABS: { key: string; label: string; Screen: ComponentType<ScreenProps> }[] = [
   { key: 'tree', label: '나무', Screen: TreeScreen },
   { key: 'activity', label: '활동 기록', Screen: ActivityScreen },
   { key: 'history', label: '기록 조회', Screen: HistoryScreen },
-] as const;
+];
 
 /**
  * 앱 시작점. 하단 탭으로 세 화면을 오간다.
@@ -19,18 +24,22 @@ const TABS = [
  */
 export default function App() {
   const [index, setIndex] = useState(0);
+  const [engine, setEngine] = useState<WateringEngine | null>(null);
 
   useEffect(() => {
     describeDatabase()
       .then((summary) => console.log(`[DB] ${summary}`))
       .catch((e) => console.error('[DB] 초기화 실패', e));
+    openAppDatabase()
+      .then((db) => setEngine(new WateringEngine(new SqliteTreeRepository(db))))
+      .catch((e) => console.error('[DB] 물주기 엔진 준비 실패', e));
   }, []);
   const { Screen } = TABS[index];
 
   return (
     <View style={styles.container}>
       <View style={styles.body}>
-        <Screen />
+        <Screen engine={engine} />
       </View>
       <View style={styles.tabBar}>
         {TABS.map((tab, i) => (
