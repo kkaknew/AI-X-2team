@@ -4,9 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { describeDatabase, getActivityType, openAppDatabase } from './data/database';
 import { ExpoLocationRepository } from './data/ExpoLocationRepository';
+import { ExpoMeditationPlayer } from './data/ExpoMeditationPlayer';
 import { SqliteTreeRepository } from './data/SqliteTreeRepository';
 import { ActivityRecorder } from './logic/ActivityRecorder';
 import { ActivityVerifier } from './logic/ActivityVerifier';
+import { MeditationSession } from './logic/MeditationSession';
 import { WateringEngine } from './logic/WateringEngine';
 import ActivityScreen, { type ActivityScreenProps } from './presentation/ActivityScreen';
 import HistoryScreen from './presentation/HistoryScreen';
@@ -17,6 +19,9 @@ type ScreenProps = TreeScreenProps & ActivityScreenProps;
 
 /** 산책 중 탭을 옮겨도 산책이 이어지도록 위치 저장소는 앱 전체에서 하나만 쓴다 */
 const location = new ExpoLocationRepository();
+
+/** 명상 음악 재생기도 하나만 쓴다. 두 곡이 겹쳐 재생되지 않게 */
+const meditation = new MeditationSession({ player: new ExpoMeditationPlayer() });
 
 const TABS: { key: string; label: string; Screen: ComponentType<ScreenProps> }[] = [
   { key: 'tree', label: '나무', Screen: TreeScreen },
@@ -57,7 +62,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <View style={styles.body}>
-        <Screen engine={engine} recorder={recorder} />
+        <Screen engine={engine} recorder={recorder} meditation={meditation} />
       </View>
       <View style={styles.tabBar}>
         {TABS.map((tab, i) => (

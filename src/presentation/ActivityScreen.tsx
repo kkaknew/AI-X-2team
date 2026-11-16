@@ -16,6 +16,11 @@ import {
   type ActivityRecorder,
   type RecordResult,
 } from '../logic/ActivityRecorder';
+import type {
+  MeditationInput,
+  MeditationSession,
+  MeditationState,
+} from '../logic/MeditationSession';
 
 /**
  * 표현 계층: 활동 5종을 선택해 기록하고 인증 결과를 보여준다. (#8 [6] 활동 기록 화면)
@@ -32,12 +37,6 @@ const ACTIVITIES: { code: ActivityCode; label: string; emoji: string }[] = [
   { code: 'reading', label: '독서', emoji: '📚' },
   { code: 'sleep', label: '수면', emoji: '😴' },
 ];
-
-/**
- * 명상 시간(초). 임시 값이다.
- * 정해진 클래식 음악 재생(#11 명상 인증)이 붙으면 음악 길이로 바뀐다. 지금은 타이머로 대신한다.
- */
-const MEDITATION_SEC = 60;
 
 interface Outcome {
   result: RecordResult;
@@ -65,9 +64,11 @@ const countChars = (text: string) => Array.from(text.trim()).length;
 export interface ActivityScreenProps {
   /** DB를 여는 동안은 null */
   recorder: ActivityRecorder | null;
+  /** 명상 음악 재생과 조작 감지 (#11) */
+  meditation: MeditationSession;
 }
 
-export default function ActivityScreen({ recorder }: ActivityScreenProps) {
+export default function ActivityScreen({ recorder, meditation }: ActivityScreenProps) {
   if (!recorder) {
     return (
       <View style={styles.loading}>
@@ -75,10 +76,16 @@ export default function ActivityScreen({ recorder }: ActivityScreenProps) {
       </View>
     );
   }
-  return <ActivityForm recorder={recorder} />;
+  return <ActivityForm recorder={recorder} meditation={meditation} />;
 }
 
-function ActivityForm({ recorder }: { recorder: ActivityRecorder }) {
+function ActivityForm({
+  recorder,
+  meditation,
+}: {
+  recorder: ActivityRecorder;
+  meditation: MeditationSession;
+}) {
   const [selected, setSelected] = useState<ActivityCode>('walk');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +148,7 @@ function ActivityForm({ recorder }: { recorder: ActivityRecorder }) {
           )}
           {selected === 'sleep' && <SleepForm {...formProps} />}
           {selected === 'meditation' && (
-            <MeditationForm {...formProps} touchListener={touchListener} />
+            <MeditationForm {...formProps} meditation={meditation} touchListener={touchListener} />
           )}
         </View>
 
@@ -339,72 +346,86 @@ function SleepForm({ recorder, busy, run }: FormProps) {
   );
 }
 
+/**
+ * 명상: 정해진 음악이 끝날 때까지 화면을 만지지 않고 앱을 벗어나지 않으면 인증된다. (#11)
+ * 화면 조작·앱 이탈은 MeditationSession이 기록만 해 두고, 인정 여부는 판정기가 정한다.
+ */
 function MeditationForm({
   recorder,
+  meditation,
   busy,
   run,
   setLocked,
   touchListener,
-}: FormProps & { touchListener: MutableRefObject<(() => void) | null> }) {
-  const [endAt, setEndAt] = useState<number | null>(null);
-  const flags = useRef({ touched: false, leftApp: false });
-  const now = useTicker(endAt !== null);
-  const remaining = endAt === null ? MEDITATION_SEC : Math.max(0, Math.ceil((endAt - now) / 1000));
+}: FormProps & {
+  meditation: MeditationSession;
+  touchListener: MutableRefObject<(() => void) | null>;
+}) {
+  const [session, setSession] = useState<MeditationState | null>(null);
+  const now = useTicker(session !== null);
+  const remaining =
+    session === null
+      ? 0
+      : Math.max(0, Math.ceil(session.durationSec - (now - session.startedAt) / 1000));
 
-  const finish = (fullyPlayed: boolean) => {
-    setEndAt(null);
+  const stopTracking = () => {
+    setSession(null);
     setLocked(false);
     touchListener.current = null;
-    const { touched, leftApp } = flags.current;
-    run(async () => {
-      const result = await recorder.record({ type: 'meditation', fullyPlayed, touched, leftApp });
-      return { result };
-    });
   };
 
-  // 시간이 다 되면 판정한다. 화면 조작·앱 이탈은 기록만 해 두고, 인정 여부는 판정기가 정한다.
-  useEffect(() => {
-    if (endAt !== null && remaining === 0) finish(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endAt, remaining]);
+  const record = (input: MeditationInput) =>
+    run(async () => ({ result: await recorder.record(input) }));
 
   // 명상 중 다른 앱으로 나가면 기록해 둔다
   useEffect(() => {
-    if (endAt === null) return;
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') flags.current.leftApp = true;
-    });
+    if (session === null) return;
+    const sub = AppState.addEventListener('change', (state) => meditation.appStateChanged(state));
     return () => sub.remove();
-  }, [endAt]);
+  }, [session, meditation]);
 
-  // 명상 중에 화면을 떠나면(탭 이동) 그냥 취소된다
+  // 명상 중에 화면을 떠나면(탭 이동) 음악을 멈추고 기록 없이 취소된다
   useEffect(
     () => () => {
       touchListener.current = null;
       setLocked(false);
+      void meditation.cancel();
     },
-    [touchListener, setLocked],
+    [meditation, touchListener, setLocked],
   );
 
   const start = () => {
-    flags.current = { touched: false, leftApp: false };
     setLocked(true);
-    setEndAt(Date.now() + MEDITATION_SEC * 1000);
-    // 시작 버튼을 누른 터치가 끝난 뒤부터 조작을 센다
-    setTimeout(() => {
-      touchListener.current = () => {
-        flags.current.touched = true;
-      };
-    }, 300);
+    run(async () => {
+      try {
+        const state = await meditation.start((input) => {
+          stopTracking();
+          record(input);
+        });
+        setSession(state);
+        touchListener.current = () => meditation.touch();
+      } catch (e) {
+        stopTracking();
+        throw e;
+      }
+    });
   };
 
-  if (endAt === null) {
+  const giveUp = async () => {
+    const input = await meditation.giveUp();
+    stopTracking();
+    if (input) record(input);
+  };
+
+  if (session === null) {
     return (
       <>
         <Text style={styles.hint}>
-          {MEDITATION_SEC / 60}분 동안 화면을 만지지 말고, 다른 앱으로 나가지 말고 명상해 보세요.
+          음악이 끝날 때까지 화면을 만지지 말고, 다른 앱으로 나가지 말고 명상해 보세요.
+          {'\n'}소리가 들리도록 음량을 켜 주세요.
         </Text>
         <Button label="명상 시작" onPress={start} disabled={busy} />
+        <Text style={styles.credit}>{meditation.credit()}</Text>
       </>
     );
   }
@@ -412,8 +433,9 @@ function MeditationForm({
   return (
     <>
       <Text style={styles.big}>{clock(remaining)}</Text>
-      <Text style={styles.sub}>눈을 감고 호흡에 집중해 보세요</Text>
-      <Button label="그만하기" kind="secondary" onPress={() => finish(false)} />
+      <Text style={styles.sub}>눈을 감고 음악과 호흡에 집중해 보세요</Text>
+      <Button label="그만하기" kind="secondary" onPress={() => void giveUp()} />
+      <Text style={styles.credit}>{meditation.credit()}</Text>
     </>
   );
 }
@@ -455,6 +477,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   counter: { alignSelf: 'flex-end', marginVertical: 8, fontSize: 13, color: '#777777' },
+  credit: { marginTop: 12, fontSize: 11, lineHeight: 15, textAlign: 'center', color: '#999999' },
   row: { flexDirection: 'row' },
   field: { flex: 1, marginHorizontal: 4 },
   label: { fontSize: 13, color: '#555555', marginBottom: 6 },
