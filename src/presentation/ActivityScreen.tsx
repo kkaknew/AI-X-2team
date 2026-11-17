@@ -177,6 +177,7 @@ function ResultCard({ outcome: { result, detail } }: { outcome: Outcome }) {
             : '💧 인증 성공!'}
       </Text>
       {detail && <Text style={styles.resultDetail}>{detail}</Text>}
+      {result.notice && <Text style={styles.resultDetail}>{result.notice}</Text>}
       {result.reasons.map((r) => (
         <Text key={r} style={styles.reason}>
           • {r}
