@@ -93,7 +93,15 @@ INSERT OR IGNORE INTO trees (id, user_id, stage_id) VALUES (1, 1, 1);
 `;
 
 /** 순서대로 한 번씩만 적용된다. 인덱스 + 1이 user_version이 된다. */
-export const MIGRATIONS: readonly string[] = [CREATE_TABLES + SEED];
+/**
+ * 2번: 일기 1편의 물 보상을 2 → 1로 줄인다. (#10 팀 결정: 일기는 하루 한 번, 물 1)
+ * 이미 설치된 앱도 다음 실행 때 이 값으로 바뀐다.
+ */
+const DIARY_REWARD_1 = `
+UPDATE activity_types SET water_reward = 1 WHERE code = 'diary';
+`;
+
+export const MIGRATIONS: readonly string[] = [CREATE_TABLES + SEED, DIARY_REWARD_1];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 

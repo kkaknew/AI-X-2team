@@ -46,6 +46,12 @@ export interface DiaryResult extends RecordResult {
   charCount: number;
 }
 
+/** 휴대폰 시간대 기준 날짜 ("2026-11-17"). 하루 한 번 판단에 쓴다 */
+export function localDay(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** 글자 수: 앞뒤 공백을 빼고, 이모지 같은 글자도 1자로 센다 */
 export const countChars = (text: string): number => Array.from(text.trim()).length;
 
@@ -53,6 +59,8 @@ export const countChars = (text: string): number => Array.from(text.trim()).leng
 export interface RecordResult extends VerificationResult {
   /** 이번에 나무에 준 물. 인증되지 않았으면 0 */
   waterGiven: number;
+  /** 인증은 됐지만 물을 주지 않은 이유 등, 화면에 함께 보여줄 안내. 없으면 undefined */
+  notice?: string;
 }
 
 /** 산책이 끝났을 때 화면에 보여줄 값 */
@@ -109,11 +117,11 @@ export class ActivityRecorder {
    * 활동 1건을 판정하고, 인증되면 물을 준다.
    * 일기·독서는 본문이 아니라 글자 수만 받는다.
    */
-  async record(activity: ActivityInput): Promise<RecordResult> {
+  async record(activity: ActivityInput, options: { water?: boolean } = {}): Promise<RecordResult> {
     const { rule, waterReward } = await this.deps.loadActivityType(activity.type);
     const result = this.deps.verifier.verify(activity, rule);
     let waterGiven = 0;
-    if (result.verified && this.deps.water) {
+    if (result.verified && this.deps.water && options.water !== false) {
       ({ waterGiven } = await this.deps.water({ verified: true, waterReward }));
     }
     return { ...result, waterGiven };
@@ -152,17 +160,24 @@ export class ActivityRecorder {
    * 1. 본문은 LocalStore(기기 안 개인 기록 DB)에만 저장한다. 빈 일기는 저장하지 않는다.
    * 2. 판정과 물주기에는 글자 수만 넘긴다.
    * 3. activity_logs에는 "일기, 몇 자, 인증 여부, 받은 물"만 남긴다. 본문은 넘기지 않는다.
+   * 4. 일기로 물을 받는 것은 하루(휴대폰 날짜 기준) 한 번뿐이다. 그날 두 번째 일기부터는
+   *    저장·인증은 되지만 물은 주지 않는다. 앱을 껐다 켜도 activity_logs로 확인하므로 다시 받을 수 없다.
    */
   async recordDiary(body: string): Promise<DiaryResult> {
     const writtenAt = new Date(this.now());
     const charCount = countChars(body);
+    const alreadyWatered = await this.wateredToday('diary', writtenAt);
 
     let entryId: number | null = null;
     if (charCount > 0 && this.deps.localStore) {
       ({ id: entryId } = await this.deps.localStore.saveDiary(body.trim(), charCount, writtenAt));
     }
 
-    const result = await this.record({ type: 'diary', charCount });
+    const recorded = await this.record({ type: 'diary', charCount }, { water: !alreadyWatered });
+    const result: RecordResult =
+      recorded.verified && alreadyWatered
+        ? { ...recorded, notice: '오늘은 이미 일기로 물을 받았어요. 일기는 저장했고, 물은 내일 다시 받을 수 있어요' }
+        : recorded;
 
     await this.deps.activities?.addLog({
       type: 'diary',
@@ -175,6 +190,14 @@ export class ActivityRecorder {
     });
 
     return { ...result, entryId, charCount };
+  }
+
+  /** 같은 종류의 활동으로 오늘(at과 같은 날짜) 이미 물을 받았는가. 저장소가 없으면 false */
+  private async wateredToday(type: ActivityCode, at: Date): Promise<boolean> {
+    if (!this.deps.activities) return false;
+    const day = localDay(at);
+    const logs = await this.deps.activities.recentLogs(type, 20);
+    return logs.some((log) => log.waterGiven > 0 && localDay(new Date(log.startedAt)) === day);
   }
 
   /** 최근 수면 기록 (최근 것부터). 저장소가 없으면 빈 배열 */
