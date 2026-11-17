@@ -1,3 +1,4 @@
+import type { ActivityLog, ActivityRepository } from '../data/ActivityRepository';
 import type { LocationRepository, WalkProgress } from '../data/LocationRepository';
 import type { ActivityCode } from '../data/schema';
 import type { ActivityInput, VerificationResult } from './ActivityVerifier';
@@ -10,11 +11,13 @@ import type { WateringInput } from './WateringEngine';
  * - 인증 기준(rule)을 DB에서 읽어 ActivityVerifier로 판정한다. 화면은 기준 수치를 모른다.
  * - 인증되면 그 활동의 물 보상(water_reward)만큼 WateringEngine(#7)으로 나무에 물을 준다.
  *   그러면 나무 화면(#9)은 WateringEngine.subscribe()로 바로 갱신된다.
+ * - 수면(#13)은 취침·기상 시각을 실제 날짜·시각으로 바꿔 activity_logs에 저장한다.
+ *   이미 기록한 잠과 시간이 겹치면 다시 기록하지 않는다 (같은 잠으로 물을 두 번 받지 않게).
  * - 산책 중인 상태(시작 시각, 지금까지 거리)를 들고 있어서,
  *   탭을 옮겼다 돌아와도 화면이 다시 이어서 보여줄 수 있다.
  */
 
-export type { ActivityCode, ActivityInput, VerificationResult, WalkProgress };
+export type { ActivityCode, ActivityInput, ActivityLog, VerificationResult, WalkProgress };
 
 export interface ActivityRecorderDeps {
   /** 판정기. 보통 new ActivityVerifier() */
@@ -25,6 +28,8 @@ export interface ActivityRecorderDeps {
   water?: (input: WateringInput) => Promise<{ waterGiven: number }>;
   /** GPS 산책 기록 */
   location: LocationRepository;
+  /** 활동 기록 저장소 (activity_logs). 없으면(DB 준비 전 등) 저장하지 않는다 */
+  activities?: ActivityRepository;
   /** 현재 시각 (ms). 테스트에서 바꿔 끼운다 */
   now?: () => number;
 }
@@ -40,6 +45,28 @@ export interface WalkResult {
   distanceM: number;
   durationSec: number;
   result: RecordResult;
+}
+
+/** 잠든 시각부터 일어난 시각까지 */
+export interface SleepPeriod {
+  /** 잠든 시각 */
+  startedAt: Date;
+  /** 일어난 시각 */
+  endedAt: Date;
+  durationMin: number;
+}
+
+/** 수면을 기록한 결과 */
+export interface SleepResult extends SleepPeriod {
+  result: RecordResult;
+}
+
+/** 이미 기록한 잠과 시간이 겹칠 때 */
+export class DuplicateSleepError extends Error {
+  constructor() {
+    super('이미 기록한 수면 시간과 겹쳐요. 같은 잠은 한 번만 기록할 수 있어요');
+    this.name = 'DuplicateSleepError';
+  }
 }
 
 /** 진행 중인 산책 */
@@ -75,6 +102,39 @@ export class ActivityRecorder {
       ({ waterGiven } = await this.deps.water({ verified: true, waterReward }));
     }
     return { ...result, waterGiven };
+  }
+
+  /**
+   * 수면 기록 (#13). 취침·기상 시각("HH:MM")을 받아 가장 최근의 그 잠으로 보고,
+   * 판정·물주기를 한 뒤 activity_logs에 저장한다.
+   * 형식이 틀리면 Error, 이미 기록한 잠과 겹치면 DuplicateSleepError를 던진다.
+   */
+  async recordSleep(bedtime: string, wakeTime: string): Promise<SleepResult> {
+    const period = sleepPeriod(bedtime, wakeTime, new Date(this.now()));
+    if (!period) throw new Error('시각을 23:30처럼 "시:분" 형식으로 입력해 주세요');
+
+    const startedAt = period.startedAt.toISOString();
+    const endedAt = period.endedAt.toISOString();
+    const activities = this.deps.activities;
+    if (activities && (await activities.findOverlapping('sleep', startedAt, endedAt)).length > 0) {
+      throw new DuplicateSleepError();
+    }
+
+    const result = await this.record({ type: 'sleep', durationMin: period.durationMin });
+    await activities?.addLog({
+      type: 'sleep',
+      startedAt,
+      endedAt,
+      durationMin: period.durationMin,
+      verified: result.verified,
+      waterGiven: result.waterGiven,
+    });
+    return { ...period, result };
+  }
+
+  /** 최근 수면 기록 (최근 것부터). 저장소가 없으면 빈 배열 */
+  async recentSleeps(limit = 3): Promise<ActivityLog[]> {
+    return this.deps.activities ? this.deps.activities.recentLogs('sleep', limit) : [];
   }
 
   /** 산책 시작. 위치 권한이 없으면 에러를 던진다 (메시지를 화면에 그대로 보여주면 된다). */
@@ -134,4 +194,22 @@ export function sleepDurationMin(bedtime: string, wakeTime: string): number | nu
   const wake = parseClock(wakeTime);
   if (bed === null || wake === null || bed === wake) return null;
   return wake > bed ? wake - bed : wake + 24 * 60 - bed;
+}
+
+/**
+ * 취침·기상 시각("HH:MM")을 실제 날짜·시각으로 바꾼다.
+ * 기상 시각은 now 이전 중 가장 최근의 그 시각(오늘, 아직 안 됐으면 어제)으로 보고,
+ * 취침 시각은 거기서 잔 시간만큼 거슬러 올라간다. 시각은 기기의 현지 시간 기준이다.
+ * 형식이 틀리거나 두 시각이 같으면 null.
+ */
+export function sleepPeriod(bedtime: string, wakeTime: string, now: Date): SleepPeriod | null {
+  const durationMin = sleepDurationMin(bedtime, wakeTime);
+  const wake = parseClock(wakeTime);
+  if (durationMin === null || wake === null) return null;
+
+  const endedAt = new Date(now);
+  endedAt.setHours(Math.floor(wake / 60), wake % 60, 0, 0);
+  if (endedAt.getTime() > now.getTime()) endedAt.setDate(endedAt.getDate() - 1);
+  const startedAt = new Date(endedAt.getTime() - durationMin * 60_000);
+  return { startedAt, endedAt, durationMin };
 }

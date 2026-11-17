@@ -13,6 +13,7 @@ import {
 import {
   sleepDurationMin,
   type ActivityCode,
+  type ActivityLog,
   type ActivityRecorder,
   type RecordResult,
 } from '../logic/ActivityRecorder';
@@ -58,6 +59,8 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const clock = (sec: number) => `${pad(Math.floor(sec / 60))}:${pad(sec % 60)}`;
 const km = (m: number) => `${(m / 1000).toFixed(2)}km`;
 const hoursText = (min: number) => `${Math.floor(min / 60)}시간${min % 60 ? ` ${min % 60}분` : ''}`;
+/** 날짜와 시각. 예: "11/16 23:00" (기기 현지 시간) */
+const dateTime = (d: Date) => `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 /** 공백을 뺀 글자 수. 이모지도 한 글자로 센다 */
 const countChars = (text: string) => Array.from(text.trim()).length;
 
@@ -300,16 +303,38 @@ function WritingForm({
   );
 }
 
+/**
+ * 수면: 잠든 시각·일어난 시각을 적으면 가장 최근의 그 잠으로 기록하고 판정한다. (#13)
+ * 같은 잠을 두 번 기록하면 ActivityRecorder가 막는다. 아래에 최근 기록을 보여준다.
+ */
 function SleepForm({ recorder, busy, run }: FormProps) {
   const [bedtime, setBedtime] = useState('23:00');
   const [wakeTime, setWakeTime] = useState('07:00');
+  const [recent, setRecent] = useState<ActivityLog[]>([]);
   const duration = sleepDurationMin(bedtime, wakeTime);
+
+  const loadRecent = () => {
+    recorder
+      .recentSleeps(3)
+      .then(setRecent)
+      .catch((e) => console.error('[SleepForm] 최근 수면 기록을 읽지 못했습니다', e));
+  };
+  useEffect(loadRecent, [recorder]);
 
   const submit = () =>
     run(async () => {
-      if (duration === null) throw new Error('시각을 23:30처럼 "시:분" 형식으로 입력해 주세요');
-      const result = await recorder.record({ type: 'sleep', durationMin: duration });
-      return { result, detail: `${bedtime} ~ ${wakeTime} (${hoursText(duration)})` };
+      try {
+        const { startedAt, endedAt, durationMin, result } = await recorder.recordSleep(
+          bedtime,
+          wakeTime,
+        );
+        return {
+          result,
+          detail: `${dateTime(startedAt)} ~ ${dateTime(endedAt)} (${hoursText(durationMin)})`,
+        };
+      } finally {
+        loadRecent();
+      }
     });
 
   return (
@@ -342,6 +367,19 @@ function SleepForm({ recorder, busy, run }: FormProps) {
         {duration === null ? '시각 형식을 확인해 주세요 (예: 23:30)' : `${hoursText(duration)} 잤어요`}
       </Text>
       <Button label="기록하고 인증하기" onPress={submit} disabled={busy} />
+
+      {recent.length > 0 && (
+        <View style={styles.history}>
+          <Text style={styles.historyTitle}>최근 수면 기록</Text>
+          {recent.map((log) => (
+            <Text key={log.id} style={styles.historyItem}>
+              {log.verified ? '💧' : '–'} {dateTime(new Date(log.startedAt))}
+              {log.endedAt ? ` ~ ${dateTime(new Date(log.endedAt))}` : ''}
+              {log.durationMin !== null ? ` · ${hoursText(log.durationMin)}` : ''}
+            </Text>
+          ))}
+        </View>
+      )}
     </>
   );
 }
@@ -502,4 +540,12 @@ const styles = StyleSheet.create({
   resultTitle: { fontSize: 16, fontWeight: '700', color: '#1d1d1d' },
   resultDetail: { marginTop: 4, fontSize: 14, color: '#555555' },
   reason: { marginTop: 6, fontSize: 14, color: '#5c1d18' },
+  history: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#cccccc',
+  },
+  historyTitle: { fontSize: 13, fontWeight: '600', color: '#555555', marginBottom: 6 },
+  historyItem: { fontSize: 14, color: '#444444', marginTop: 4 },
 });
