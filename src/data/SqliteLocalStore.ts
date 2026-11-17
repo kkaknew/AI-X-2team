@@ -1,4 +1,4 @@
-import type { DiaryEntry, LocalStore } from './LocalStore';
+import type { DiaryEntry, LocalStore, ReadingEntry } from './LocalStore';
 import type { SqlDatabase } from './SqliteTreeRepository';
 
 /**
@@ -11,6 +11,18 @@ interface DiaryRow {
   body: string;
   char_count: number;
 }
+
+interface ReadingRow extends DiaryRow {
+  title: string;
+}
+
+const toReading = (r: ReadingRow): ReadingEntry => ({
+  id: r.id,
+  writtenAt: r.written_at,
+  title: r.title,
+  body: r.body,
+  charCount: r.char_count,
+});
 
 const toEntry = (r: DiaryRow): DiaryEntry => ({
   id: r.id,
@@ -42,6 +54,24 @@ export class SqliteLocalStore implements LocalStore {
       [limit],
     );
     return rows.map(toEntry);
+  }
+
+  async saveReading(title: string, body: string, charCount: number, writtenAt: Date): Promise<ReadingEntry> {
+    const at = writtenAt.toISOString();
+    await this.db.runAsync(
+      'INSERT INTO reading_entries (written_at, title, body, char_count) VALUES (?, ?, ?, ?)',
+      [at, title, body, charCount],
+    );
+    const row = await this.db.getFirstAsync<{ id: number }>('SELECT last_insert_rowid() AS id', []);
+    return { id: row?.id ?? 0, writtenAt: at, title, body, charCount };
+  }
+
+  async listReadings(limit = 50): Promise<ReadingEntry[]> {
+    const rows = await this.db.getAllAsync<ReadingRow>(
+      'SELECT id, written_at, title, body, char_count FROM reading_entries ORDER BY written_at DESC, id DESC LIMIT ?',
+      [limit],
+    );
+    return rows.map(toReading);
   }
 
   async getDiary(id: number): Promise<DiaryEntry | null> {
