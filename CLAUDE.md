@@ -44,6 +44,7 @@ npm run typecheck   # TypeScript 타입 검사
 - 활동별 인증 기준은 `activity_types.rule`(JSON)에 둔다. 판정은 `ActivityVerifier`가 이 값을 읽어서 한다.
 - 스키마 변경은 `MIGRATIONS` 배열 끝에 새 SQL을 추가한다. 기존 항목은 고치지 않는다 (이미 설치된 앱은 `PRAGMA user_version`으로 적용 여부를 기억).
 - 알림(리마인더, 시듦 경고)도 서버 푸시가 아니라 기기 로컬 알림으로 예약한다.
+- 일기 본문은 앱 DB가 아니라 **개인 기록 DB**(`dopamine-tree-local.db`, 스키마 `src/data/localSchema.ts`, 접근 `LocalStore`)에만 저장한다. 앱 DB의 `activity_logs`에는 글자 수·인증 여부·받은 물만 남긴다. 나중에 앱 DB를 공유·동기화해도 개인 기록 DB는 내보내지 않는다.
 
 ## 활동 인증 규칙 (수치는 팀에서 확정 전)
 

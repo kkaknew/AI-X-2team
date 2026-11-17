@@ -2,10 +2,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ComponentType } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { describeDatabase, getActivityType, openAppDatabase } from './data/database';
+import { describeDatabase, getActivityType, openAppDatabase, openLocalDatabase } from './data/database';
 import { ExpoLocationRepository } from './data/ExpoLocationRepository';
 import { ExpoMeditationPlayer } from './data/ExpoMeditationPlayer';
 import { SqliteActivityRepository } from './data/SqliteActivityRepository';
+import { SqliteLocalStore } from './data/SqliteLocalStore';
 import { SqliteTreeRepository } from './data/SqliteTreeRepository';
 import { ActivityRecorder } from './logic/ActivityRecorder';
 import { ActivityVerifier } from './logic/ActivityVerifier';
@@ -43,8 +44,8 @@ export default function App() {
     describeDatabase()
       .then((summary) => console.log(`[DB] ${summary}`))
       .catch((e) => console.error('[DB] 초기화 실패', e));
-    openAppDatabase()
-      .then((db) => {
+    Promise.all([openAppDatabase(), openLocalDatabase()])
+      .then(([db, localDb]) => {
         const watering = new WateringEngine(new SqliteTreeRepository(db));
         setEngine(watering);
         setRecorder(
@@ -54,6 +55,7 @@ export default function App() {
             water: (input) => watering.water(input),
             location,
             activities: new SqliteActivityRepository(db),
+            localStore: new SqliteLocalStore(localDb),
           }),
         );
       })

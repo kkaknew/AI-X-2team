@@ -28,7 +28,7 @@ import type {
  *
  * 인증 기준(거리, 글자 수, 시간 등)은 이 화면이 모른다. ActivityRecorder가 판정하고,
  * 화면은 결과(verified, reasons)만 보여준다.
- * 일기·독후감 본문은 글자 수만 넘기고 저장하지 않는다. (본문 저장은 #10, #12)
+ * 일기 본문은 ActivityRecorder.recordDiary가 기기 안에만 저장한다 (#10). 독후감 본문 저장은 #12
  */
 
 const ACTIVITIES: { code: ActivityCode; label: string; emoji: string }[] = [
@@ -282,7 +282,9 @@ function WritingForm({
 
   const submit = () =>
     run(async () => {
-      const result = await recorder.record({ type, charCount });
+      // 일기는 본문을 기기 안에만 저장한다 (#10). 독후감은 아직 글자 수만 넘긴다 (#12)
+      const result =
+        type === 'diary' ? await recorder.recordDiary(text) : await recorder.record({ type, charCount });
       if (result.verified) setText('');
       return { result, detail: `${charCount}자 작성` };
     });
