@@ -84,10 +84,10 @@ export interface SleepResult extends SleepPeriod {
   result: RecordResult;
 }
 
-/** 이미 기록한 잠과 시간이 겹칠 때 */
+/** 이미 기록한 잠과 시간이 겹치거나, 그날(일어난 날짜) 수면을 이미 기록했을 때 */
 export class DuplicateSleepError extends Error {
-  constructor() {
-    super('이미 기록한 수면 시간과 겹쳐요. 같은 잠은 한 번만 기록할 수 있어요');
+  constructor(message = '이미 기록한 수면 시간과 겹쳐요. 같은 잠은 한 번만 기록할 수 있어요') {
+    super(message);
     this.name = 'DuplicateSleepError';
   }
 }
@@ -130,7 +130,8 @@ export class ActivityRecorder {
   /**
    * 수면 기록 (#13). 취침·기상 시각("HH:MM")을 받아 가장 최근의 그 잠으로 보고,
    * 판정·물주기를 한 뒤 activity_logs에 저장한다.
-   * 형식이 틀리면 Error, 이미 기록한 잠과 겹치면 DuplicateSleepError를 던진다.
+   * 수면은 하루(일어난 날짜) 한 번만 기록한다. 물 보상은 1 (schema 3번 마이그레이션).
+   * 형식이 틀리면 Error, 이미 기록한 잠과 겹치거나 그날 이미 기록했으면 DuplicateSleepError를 던진다.
    */
   async recordSleep(bedtime: string, wakeTime: string): Promise<SleepResult> {
     const period = sleepPeriod(bedtime, wakeTime, new Date(this.now()));
@@ -139,8 +140,19 @@ export class ActivityRecorder {
     const startedAt = period.startedAt.toISOString();
     const endedAt = period.endedAt.toISOString();
     const activities = this.deps.activities;
-    if (activities && (await activities.findOverlapping('sleep', startedAt, endedAt)).length > 0) {
-      throw new DuplicateSleepError();
+    if (activities) {
+      if ((await activities.findOverlapping('sleep', startedAt, endedAt)).length > 0) {
+        throw new DuplicateSleepError();
+      }
+      // 하루(일어난 날짜, 휴대폰 시간대 기준)에 한 번만. 밤잠을 기록했으면 같은 날 낮잠은 기록하지 않는다
+      const wakeDay = localDay(period.endedAt);
+      const recent = await activities.recentLogs('sleep', 20);
+      if (recent.some((log) => log.endedAt && localDay(new Date(log.endedAt)) === wakeDay)) {
+        const d = period.endedAt;
+        throw new DuplicateSleepError(
+          `${d.getMonth() + 1}/${d.getDate()}에 일어난 수면은 이미 기록했어요. 수면은 하루에 한 번만 기록할 수 있어요`,
+        );
+      }
     }
 
     const result = await this.record({ type: 'sleep', durationMin: period.durationMin });
