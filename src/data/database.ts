@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
+import { pendingLocalMigrations } from './localSchema';
 import { pendingMigrations, TABLE_NAMES } from './schema';
 
 /**
@@ -26,6 +27,37 @@ async function open(): Promise<SQLite.SQLiteDatabase> {
 
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   for (const m of pendingMigrations(row?.user_version ?? 0)) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(m.sql);
+      await db.execAsync(`PRAGMA user_version = ${m.version}`);
+    });
+  }
+  return db;
+}
+
+/**
+ * 개인 기록 DB(일기 본문 등)를 연다. (#10)
+ * 앱 DB와 다른 파일이라, 나중에 앱 DB를 공유·동기화해도 이 파일은 함께 나가지 않는다.
+ */
+const LOCAL_DB_NAME = 'dopamine-tree-local.db';
+
+let openingLocal: Promise<SQLite.SQLiteDatabase> | null = null;
+
+export function openLocalDatabase(): Promise<SQLite.SQLiteDatabase> {
+  if (!openingLocal) {
+    openingLocal = openLocal().catch((e) => {
+      openingLocal = null;
+      throw e;
+    });
+  }
+  return openingLocal;
+}
+
+async function openLocal(): Promise<SQLite.SQLiteDatabase> {
+  const db = await SQLite.openDatabaseAsync(LOCAL_DB_NAME);
+  await db.execAsync('PRAGMA journal_mode = WAL;');
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  for (const m of pendingLocalMigrations(row?.user_version ?? 0)) {
     await db.withTransactionAsync(async () => {
       await db.execAsync(m.sql);
       await db.execAsync(`PRAGMA user_version = ${m.version}`);

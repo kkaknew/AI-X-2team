@@ -1,4 +1,5 @@
 import type { ActivityLog, ActivityRepository } from '../data/ActivityRepository';
+import type { LocalStore } from '../data/LocalStore';
 import type { LocationRepository, WalkProgress } from '../data/LocationRepository';
 import type { ActivityCode } from '../data/schema';
 import type { ActivityInput, VerificationResult } from './ActivityVerifier';
@@ -13,6 +14,8 @@ import type { WateringInput } from './WateringEngine';
  *   그러면 나무 화면(#9)은 WateringEngine.subscribe()로 바로 갱신된다.
  * - 수면(#13)은 취침·기상 시각을 실제 날짜·시각으로 바꿔 activity_logs에 저장한다.
  *   이미 기록한 잠과 시간이 겹치면 다시 기록하지 않는다 (같은 잠으로 물을 두 번 받지 않게).
+ * - 일기(#10)는 본문을 기기 안 개인 기록 저장소(LocalStore)에만 저장하고,
+ *   activity_logs에는 글자 수와 인증 결과만 남긴다.
  * - 산책 중인 상태(시작 시각, 지금까지 거리)를 들고 있어서,
  *   탭을 옮겼다 돌아와도 화면이 다시 이어서 보여줄 수 있다.
  */
@@ -32,7 +35,19 @@ export interface ActivityRecorderDeps {
   activities?: ActivityRepository;
   /** 현재 시각 (ms). 테스트에서 바꿔 끼운다 */
   now?: () => number;
+  /** 일기 본문을 저장할 기기 안 개인 기록 저장소 (#10). 없으면 본문을 저장하지 않는다 */
+  localStore?: LocalStore;
 }
+
+/** 일기를 기록한 결과 */
+export interface DiaryResult extends RecordResult {
+  /** 기기에 저장된 일기 번호. 저장하지 않았으면 null */
+  entryId: number | null;
+  charCount: number;
+}
+
+/** 글자 수: 앞뒤 공백을 빼고, 이모지 같은 글자도 1자로 센다 */
+export const countChars = (text: string): number => Array.from(text.trim()).length;
 
 /** 활동 1건을 기록한 결과 */
 export interface RecordResult extends VerificationResult {
@@ -130,6 +145,36 @@ export class ActivityRecorder {
       waterGiven: result.waterGiven,
     });
     return { ...period, result };
+  }
+
+  /**
+   * 일기 1편을 기록한다. (#10 [8] 일기 로컬 저장)
+   * 1. 본문은 LocalStore(기기 안 개인 기록 DB)에만 저장한다. 빈 일기는 저장하지 않는다.
+   * 2. 판정과 물주기에는 글자 수만 넘긴다.
+   * 3. activity_logs에는 "일기, 몇 자, 인증 여부, 받은 물"만 남긴다. 본문은 넘기지 않는다.
+   */
+  async recordDiary(body: string): Promise<DiaryResult> {
+    const writtenAt = new Date(this.now());
+    const charCount = countChars(body);
+
+    let entryId: number | null = null;
+    if (charCount > 0 && this.deps.localStore) {
+      ({ id: entryId } = await this.deps.localStore.saveDiary(body.trim(), charCount, writtenAt));
+    }
+
+    const result = await this.record({ type: 'diary', charCount });
+
+    await this.deps.activities?.addLog({
+      type: 'diary',
+      startedAt: writtenAt.toISOString(),
+      endedAt: null,
+      durationMin: null,
+      charCount,
+      verified: result.verified,
+      waterGiven: result.waterGiven,
+    });
+
+    return { ...result, entryId, charCount };
   }
 
   /** 최근 수면 기록 (최근 것부터). 저장소가 없으면 빈 배열 */
