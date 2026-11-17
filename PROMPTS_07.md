@@ -144,4 +144,35 @@ GitHub 이슈 #8 (활동지 번호 6)
 - 팀에서 정할 것: 기록(activity_logs) 저장은 #14 기록 조회 화면과 함께 붙일지
 
 ---
+## [이슈 #_13_] 제목 / Title : [11] 수면 기록
+
+GitHub 이슈 #13 (활동지 번호 11)
+
+**목표(스펙) / Spec**
+- 입력 Input: 이슈 완료 조건, `CLAUDE.md`(3계층 규칙, 데이터는 기기 SQLite에만 저장), #4 DB 스키마(`activity_logs`), #6 활동 인증 규칙(수면 `min_duration_min`), #8 활동 기록 화면
+- 처리 Processing: AI에게 수면 기록 저장과 테스트 초안을 요청하고, 휴대폰(Expo Go)에서 실행해 본 뒤 직접 커밋·PR
+- 출력 Output: `src/data/ActivityRepository.ts`(인터페이스), `src/data/SqliteActivityRepository.ts`(SQLite 구현), `src/logic/ActivityRecorder.ts`(`recordSleep`, `sleepPeriod`), `src/presentation/ActivityScreen.tsx`(수면 입력·최근 기록), `src/App.tsx`(조립), `src/__tests__/SleepRecord.test.ts`
+- 실패 조건 Failure: 취침·기상 시각이 저장되지 않거나, 기준 시간(7시간) 이상인데 인증되지 않으면 실패
+
+**요청한 프롬프트 요지 / Prompt (summary)**
+- 이슈 11번 수면 기록을 만들어 달라. GitHub에는 내가 직접 올릴 것이니 코드는 올리지 말 것
+
+**결과에 대한 판단 / Decisions**
+- 채택한 부분과 이유 / Accepted, because:
+  - "시:분"으로 입력한 취침·기상 시각을 실제 날짜·시각으로 바꿔 `activity_logs.started_at`, `ended_at`에 저장하는 것. 기록 조회 화면(#14)과 시듦 판정(#17)에서 날짜별로 쓸 수 있기 때문
+  - 인증되지 않은 수면도 기록은 남기는 것(`verified = 0`). 완료 조건이 "기록하고, 기준 이상이면 인증"이라 기록과 인증을 나눴기 때문
+  - 이미 기록한 잠과 시간이 겹치면 다시 기록하지 않는 것. 같은 잠으로 물을 여러 번 받는 것을 막기 위해
+  - 저장소가 expo-sqlite를 직접 import하지 않고 `SqlDatabase`만 받는 구조(#7 `SqliteTreeRepository`와 같은 방식). Node 내장 SQLite로 같은 SQL을 테스트할 수 있기 때문
+- 수정한 부분과 이유 / Changed, because:
+  - 비어 있던 `ActivityRepository` 인터페이스를 채움. 수면 외 활동(산책·일기 등)도 같은 `addLog`로 저장할 수 있게 했지만, 이번 이슈에서는 수면만 저장함
+- 폐기한 부분과 이유 / Rejected, because:
+  - (팀 검토 후 작성)
+
+**검증 방법 / How it was verified**
+- `npm test`: 수면 기록 테스트 14개 포함 전체 104개 통과 (`pass 104`, `fail 0`)
+- 완료 조건 대응 테스트: "7시간 이상 자면 인증되고, 취침·기상 시각이 DB에 저장된다", "7시간보다 적게 자면 인증되지 않지만 기록은 남는다", "같은 잠을 다시 기록하면 막고 물도 주지 않는다"
+- 휴대폰(Expo Go)에서 활동 기록 → 수면 실행 확인: (직접 확인 후 작성)
+- 팀에서 정할 것: 산책·일기 등 다른 활동도 activity_logs에 저장할지(#14 기록 조회 화면과 함께 결정)
+
+---
 (이슈 단위로 반복 / repeat per issue)

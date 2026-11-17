@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { describeDatabase, getActivityType, openAppDatabase } from './data/database';
 import { ExpoLocationRepository } from './data/ExpoLocationRepository';
 import { ExpoMeditationPlayer } from './data/ExpoMeditationPlayer';
+import { SqliteActivityRepository } from './data/SqliteActivityRepository';
 import { SqliteTreeRepository } from './data/SqliteTreeRepository';
 import { ActivityRecorder } from './logic/ActivityRecorder';
 import { ActivityVerifier } from './logic/ActivityVerifier';
@@ -52,6 +53,7 @@ export default function App() {
             loadActivityType: getActivityType,
             water: (input) => watering.water(input),
             location,
+            activities: new SqliteActivityRepository(db),
           }),
         );
       })
