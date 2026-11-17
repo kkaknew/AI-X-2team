@@ -1,5 +1,5 @@
 import type { ActivityLog, ActivityRepository } from '../data/ActivityRepository';
-import type { LocalStore } from '../data/LocalStore';
+import type { LocalStore, ReadingEntry } from '../data/LocalStore';
 import type { LocationRepository, WalkProgress } from '../data/LocationRepository';
 import type { ActivityCode } from '../data/schema';
 import type { ActivityInput, VerificationResult } from './ActivityVerifier';
@@ -14,13 +14,13 @@ import type { WateringInput } from './WateringEngine';
  *   그러면 나무 화면(#9)은 WateringEngine.subscribe()로 바로 갱신된다.
  * - 수면(#13)은 취침·기상 시각을 실제 날짜·시각으로 바꿔 activity_logs에 저장한다.
  *   이미 기록한 잠과 시간이 겹치면 다시 기록하지 않는다 (같은 잠으로 물을 두 번 받지 않게).
- * - 일기(#10)는 본문을 기기 안 개인 기록 저장소(LocalStore)에만 저장하고,
- *   activity_logs에는 글자 수와 인증 결과만 남긴다.
+ * - 일기(#10)·독후감(#12)은 본문을 기기 안 개인 기록 저장소(LocalStore)에만 저장하고,
+ *   activity_logs에는 글자 수와 인증 결과만 남긴다. 둘 다 물은 하루 한 번만 준다.
  * - 산책 중인 상태(시작 시각, 지금까지 거리)를 들고 있어서,
  *   탭을 옮겼다 돌아와도 화면이 다시 이어서 보여줄 수 있다.
  */
 
-export type { ActivityCode, ActivityInput, ActivityLog, VerificationResult, WalkProgress };
+export type { ActivityCode, ActivityInput, ActivityLog, ReadingEntry, VerificationResult, WalkProgress };
 
 export interface ActivityRecorderDeps {
   /** 판정기. 보통 new ActivityVerifier() */
@@ -42,6 +42,13 @@ export interface ActivityRecorderDeps {
 /** 일기를 기록한 결과 */
 export interface DiaryResult extends RecordResult {
   /** 기기에 저장된 일기 번호. 저장하지 않았으면 null */
+  entryId: number | null;
+  charCount: number;
+}
+
+/** 독후감을 기록한 결과 */
+export interface ReadingResult extends RecordResult {
+  /** 기기에 저장된 독후감 번호. 저장하지 않았으면 null */
   entryId: number | null;
   charCount: number;
 }
@@ -202,6 +209,54 @@ export class ActivityRecorder {
     });
 
     return { ...result, entryId, charCount };
+  }
+
+  /**
+   * 독후감 1편을 기록한다. (#12 [10] 독서 인증)
+   * 1. 제목·본문은 LocalStore(기기 안 개인 기록 DB)에만 저장한다. 빈 독후감은 저장하지 않는다.
+   *    기준(200자) 미만이어도 저장은 한다. 인증만 되지 않는다.
+   * 2. 판정에는 글자 수만 넘긴다. 200자 이상이면 인증된다 (기준은 activity_types.rule).
+   * 3. 인증되면 물 1(activity_types.water_reward)을 준다. 단, 하루(휴대폰 날짜) 한 번만.
+   *    그날 두 번째 독후감부터는 저장·인증은 되지만 물은 0. 앱을 껐다 켜도 activity_logs로 확인한다.
+   * 4. activity_logs에는 "독서, 몇 자, 인증 여부, 받은 물"만 남긴다. 제목·본문은 넘기지 않는다.
+   */
+  async recordReading(title: string, body: string): Promise<ReadingResult> {
+    const writtenAt = new Date(this.now());
+    const charCount = countChars(body);
+    const alreadyWatered = await this.wateredToday('reading', writtenAt);
+
+    let entryId: number | null = null;
+    if (charCount > 0 && this.deps.localStore) {
+      ({ id: entryId } = await this.deps.localStore.saveReading(title.trim(), body.trim(), charCount, writtenAt));
+    }
+
+    const recorded = await this.record({ type: 'reading', charCount }, { water: !alreadyWatered });
+    const result: RecordResult =
+      recorded.verified && alreadyWatered
+        ? {
+            ...recorded,
+            notice: '오늘은 이미 독후감으로 물을 받았어요. 독후감은 저장했고, 물은 내일 다시 받을 수 있어요',
+          }
+        : !recorded.verified && entryId !== null
+          ? { ...recorded, notice: '독후감은 저장했어요. 200자 이상 쓰면 인증되고 물을 받아요' }
+          : recorded;
+
+    await this.deps.activities?.addLog({
+      type: 'reading',
+      startedAt: writtenAt.toISOString(),
+      endedAt: null,
+      durationMin: null,
+      charCount,
+      verified: result.verified,
+      waterGiven: result.waterGiven,
+    });
+
+    return { ...result, entryId, charCount };
+  }
+
+  /** 최근 독후감 (최근 것부터). 저장소가 없으면 빈 배열. 기기 안에서만 보여준다 */
+  async recentReadings(limit = 20): Promise<ReadingEntry[]> {
+    return this.deps.localStore ? this.deps.localStore.listReadings(limit) : [];
   }
 
   /** 같은 종류의 활동으로 오늘(at과 같은 날짜) 이미 물을 받았는가. 저장소가 없으면 false */

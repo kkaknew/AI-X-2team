@@ -44,14 +44,14 @@ npm run typecheck   # TypeScript 타입 검사
 - 활동별 인증 기준은 `activity_types.rule`(JSON)에 둔다. 판정은 `ActivityVerifier`가 이 값을 읽어서 한다.
 - 스키마 변경은 `MIGRATIONS` 배열 끝에 새 SQL을 추가한다. 기존 항목은 고치지 않는다 (이미 설치된 앱은 `PRAGMA user_version`으로 적용 여부를 기억).
 - 알림(리마인더, 시듦 경고)도 서버 푸시가 아니라 기기 로컬 알림으로 예약한다.
-- 일기 본문은 앱 DB가 아니라 **개인 기록 DB**(`dopamine-tree-local.db`, 스키마 `src/data/localSchema.ts`, 접근 `LocalStore`)에만 저장한다. 앱 DB의 `activity_logs`에는 글자 수·인증 여부·받은 물만 남긴다. 나중에 앱 DB를 공유·동기화해도 개인 기록 DB는 내보내지 않는다.
+- 일기·독후감 본문(독후감은 책 제목 포함)은 앱 DB가 아니라 **개인 기록 DB**(`dopamine-tree-local.db`, 스키마 `src/data/localSchema.ts`, 접근 `LocalStore`)에만 저장한다. 앱 DB의 `activity_logs`에는 글자 수·인증 여부·받은 물만 남긴다. 나중에 앱 DB를 공유·동기화해도 개인 기록 DB는 내보내지 않는다.
 
 ## 활동 인증 규칙 (수치는 팀에서 확정 전)
 
 - 산책: GPS로 거리·시간 계산. 평균 시속 7km 초과는 인정하지 않음 (차량 이동 방지)
 - 일기: 작성하면 인정. **물은 하루(휴대폰 날짜) 한 번, 1만** 준다. 같은 날 두 번째 일기부터는 저장·인증만 하고 물은 0 (`ActivityRecorder.recordDiary`가 `activity_logs`로 확인)
 - 명상: 정해진 클래식 음악이 끝까지 재생되는 동안 다른 조작이 없으면 인정
-- 독서: 독후감을 기준 분량(예: 200자) 이상 쓰면 인정
+- 독서: 독후감을 기준 분량(200자) 이상 쓰면 인정. **물은 하루(휴대폰 날짜) 한 번, 1만** 준다. 200자 미만이어도 저장은 하고 인증만 안 한다. 같은 날 두 번째 독후감부터는 저장·인증만 하고 물은 0 (`ActivityRecorder.recordReading`이 `activity_logs`로 확인)
 - 수면: 취침·기상 시각 기준 시간 이상이면 인정. **하루(일어난 날짜, 휴대폰 시간대) 한 번만 기록**하고 물은 **1** 준다. 같은 날 두 번째 수면은 기록하지 않는다 (`ActivityRecorder.recordSleep`이 `activity_logs`로 확인)
 - 시듦: 마지막 인증 후 기준 기간(예: 3일) 경과 시 시듦, 하루 전 경고 푸시
 

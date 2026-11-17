@@ -138,12 +138,12 @@ describe('활동 5종 기록', () => {
 });
 
 describe('인증되면 물을 준다', () => {
-  test('인증된 활동은 그 활동의 보상만큼 물을 준다 (독서 3)', async () => {
+  test('인증된 활동은 그 활동의 보상만큼 물을 준다 (독서 1, #12)', async () => {
     const { recorder, watered } = setup();
     const r = await recorder.record({ type: 'reading', charCount: 250 });
     assert.equal(r.verified, true);
-    assert.equal(r.waterGiven, 3);
-    assert.deepEqual(watered, [{ verified: true, waterReward: 3 }]);
+    assert.equal(r.waterGiven, 1);
+    assert.deepEqual(watered, [{ verified: true, waterReward: 1 }]);
   });
 
   test('인증되지 않으면 물을 주지 않는다', async () => {

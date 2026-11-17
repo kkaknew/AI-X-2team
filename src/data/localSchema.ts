@@ -16,7 +16,20 @@ CREATE TABLE IF NOT EXISTS diary_entries (
 CREATE INDEX IF NOT EXISTS idx_diary_entries_written ON diary_entries (written_at);
 `;
 
-export const LOCAL_MIGRATIONS: readonly string[] = [CREATE_DIARY];
+/** 2번: 독후감 (#12 [10] 독서 인증). 책 제목과 본문도 일기처럼 기기 밖으로 나가지 않는다 */
+const CREATE_READING = `
+CREATE TABLE IF NOT EXISTS reading_entries (
+  id          INTEGER PRIMARY KEY,
+  written_at  TEXT    NOT NULL,
+  title       TEXT    NOT NULL DEFAULT '',
+  body        TEXT    NOT NULL,
+  char_count  INTEGER NOT NULL CHECK (char_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reading_entries_written ON reading_entries (written_at);
+`;
+
+export const LOCAL_MIGRATIONS: readonly string[] = [CREATE_DIARY, CREATE_READING];
 
 export const LOCAL_SCHEMA_VERSION = LOCAL_MIGRATIONS.length;
 
