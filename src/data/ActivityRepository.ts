@@ -35,4 +35,6 @@ export interface ActivityRepository {
   findOverlapping(type: ActivityCode, startedAt: string, endedAt: string): Promise<ActivityLog[]>;
   /** 같은 종류의 최근 기록 (최근 것부터) */
   recentLogs(type: ActivityCode, limit: number): Promise<ActivityLog[]>;
+  /** 모든 종류의 기록 중 시작 시각이 [from, to) 안에 있는 것 (오래된 것부터). 기록 조회(#14)용 */
+  logsBetween(from: string, to: string): Promise<ActivityLog[]>;
 }
