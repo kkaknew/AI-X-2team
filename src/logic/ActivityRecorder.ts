@@ -16,6 +16,7 @@ import type { WateringInput } from './WateringEngine';
  *   이미 기록한 잠과 시간이 겹치면 다시 기록하지 않는다 (같은 잠으로 물을 두 번 받지 않게).
  * - 일기(#10)·독후감(#12)은 본문을 기기 안 개인 기록 저장소(LocalStore)에만 저장하고,
  *   activity_logs에는 글자 수와 인증 결과만 남긴다. 둘 다 물은 하루 한 번만 준다.
+ * - 명상(#11)도 activity_logs에 남기고, 물은 하루 한 번만 준다.
  * - 산책 중인 상태(시작 시각, 지금까지 거리)를 들고 있어서,
  *   탭을 옮겼다 돌아와도 화면이 다시 이어서 보여줄 수 있다.
  */
@@ -274,6 +275,39 @@ export class ActivityRecorder {
     if (type === 'reading') return store.listReadings(limit);
     const diaries = await store.listDiaries(limit);
     return diaries.map((d) => ({ ...d, title: '' }));
+  }
+
+  /**
+   * 명상 1번을 기록한다. (#11 [9] 명상 인증)
+   * 1. 판정에는 MeditationSession이 모은 사실(끝까지 들었는지, 화면 조작·앱 이탈)만 넘긴다.
+   * 2. 인증되면 물 1(activity_types.water_reward, schema 5번 마이그레이션)을 준다. 단, 하루(휴대폰 날짜) 한 번만.
+   *    그날 두 번째 명상부터는 인증은 되지만 물은 0. 앱을 껐다 켜도 activity_logs로 확인한다.
+   * 3. activity_logs에 "명상, 인증 여부, 받은 물"을 남긴다.
+   */
+  async recordMeditation(input: Extract<ActivityInput, { type: 'meditation' }>): Promise<RecordResult> {
+    const finishedAt = new Date(this.now());
+    const alreadyWatered = await this.wateredToday('meditation', finishedAt);
+
+    const recorded = await this.record(input, { water: !alreadyWatered });
+    const result: RecordResult =
+      recorded.verified && alreadyWatered
+        ? { ...recorded, notice: '오늘은 이미 명상으로 물을 받았어요. 물은 내일 다시 받을 수 있어요' }
+        : recorded;
+
+    await this.deps.activities?.addLog({
+      type: 'meditation',
+      startedAt: finishedAt.toISOString(),
+      endedAt: null,
+      durationMin: null,
+      verified: result.verified,
+      waterGiven: result.waterGiven,
+    });
+    return result;
+  }
+
+  /** 오늘 이미 명상으로 물을 받았는가. 명상을 시작하기 전에 화면에 알려주는 데 쓴다 */
+  async meditationWateredToday(): Promise<boolean> {
+    return this.wateredToday('meditation', new Date(this.now()));
   }
 
   /** 최근 독후감 (최근 것부터). 저장소가 없으면 빈 배열. 기기 안에서만 보여준다 */

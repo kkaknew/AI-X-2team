@@ -471,6 +471,8 @@ function MeditationForm({
   touchListener: MutableRefObject<(() => void) | null>;
 }) {
   const [session, setSession] = useState<MeditationState | null>(null);
+  /** 오늘 이미 명상으로 물을 받았는가 (시작 전 안내용) */
+  const [wateredToday, setWateredToday] = useState(false);
   const now = useTicker(session !== null);
   const remaining =
     session === null
@@ -484,7 +486,24 @@ function MeditationForm({
   };
 
   const record = (input: MeditationInput) =>
-    run(async () => ({ result: await recorder.record(input) }));
+    run(async () => {
+      const result = await recorder.recordMeditation(input);
+      setWateredToday(await recorder.meditationWateredToday());
+      return { result };
+    });
+
+  // 명상 화면을 열 때 오늘 이미 물을 받았는지 확인한다
+  useEffect(() => {
+    if (session !== null) return;
+    let active = true;
+    recorder
+      .meditationWateredToday()
+      .then((watered) => active && setWateredToday(watered))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [recorder, session]);
 
   // 명상 중 다른 앱으로 나가면 기록해 둔다
   useEffect(() => {
@@ -533,6 +552,11 @@ function MeditationForm({
           음악이 끝날 때까지 화면을 만지지 말고, 다른 앱으로 나가지 말고 명상해 보세요.
           {'\n'}소리가 들리도록 음량을 켜 주세요.
         </Text>
+        {wateredToday && (
+          <Text style={styles.hint}>
+            오늘은 이미 명상으로 물을 받았어요. 명상은 할 수 있지만 물은 내일 다시 받을 수 있어요.
+          </Text>
+        )}
         <Button label="명상 시작" onPress={start} disabled={busy} />
         <Text style={styles.credit}>{meditation.credit()}</Text>
       </>
