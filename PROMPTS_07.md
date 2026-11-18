@@ -299,4 +299,37 @@ GitHub 이슈 #13 후속 (팀 결정 반영, #10 일기와 같은 방식)
 - 팀에서 정할 것: 지난 글을 고치거나 지우는 기능이 필요한지
 
 ---
+## [이슈 #_15_] 제목 / Title : [13] 물주기 리마인더
+
+GitHub 이슈 #15 (활동지 번호 13)
+
+**목표(스펙) / Spec**
+- 입력 Input: 이슈 완료 조건, `CLAUDE.md`(3계층 규칙, "알림은 서버 푸시가 아니라 기기 로컬 알림"), #4 DB 스키마(`reminders` 테이블), 비어 있던 `PushClient`·`ReminderService`
+- 처리 Processing: AI에게 리마인더 설정 화면·저장·알림 예약과 테스트 초안을 요청하고, 휴대폰(Expo Go)에서 알림이 오는지 확인한 뒤 직접 커밋·PR
+- 출력 Output: `src/data/PushClient.ts`(인터페이스), `src/data/ExpoPushClient.ts`(expo-notifications 구현), `src/data/ReminderRepository.ts`(reminders 테이블), `src/logic/ReminderService.ts`, `src/presentation/ReminderScreen.tsx`(알림 탭), `src/App.tsx`(조립), `src/package.json`·`src/app.json`(expo-notifications 추가), `src/__tests__/ReminderService.test.ts`
+- 실패 조건 Failure: 설정한 시각에 알림이 오지 않거나, 시각을 바꿨는데 예전 시각에도 알림이 오면 실패
+
+**요청한 프롬프트 요지 / Prompt (summary)**
+- 이슈 13번 물주기 리마인더를 만들어 달라. GitHub에는 내가 직접 올릴 것이니 코드는 올리지 말 것
+
+**결과에 대한 판단 / Decisions**
+- 채택한 부분과 이유 / Accepted, because:
+  - 서버 푸시 대신 expo-notifications의 "매일 같은 시각" 로컬 알림(DAILY 트리거). 팀 규칙(기기 로컬 알림)과 맞고 서버가 필요 없기 때문
+  - 설정은 이미 있던 `reminders` 테이블에 type_id NULL 행 하나로 저장. 스키마를 바꾸지 않아도 되기 때문
+  - 알림 id를 하나(`watering-reminder`)로 고정해, 시각을 바꾸면 알림이 두 개 생기지 않고 바뀌게 함
+  - 켤 때 알림 권한을 묻고, 거절하면 "켜짐"으로 저장하지 않음. 켜졌다고 보이는데 알림이 안 오는 일이 없게
+  - 앱을 켤 때 저장된 설정대로 다시 예약(`restore`)하되 권한은 새로 묻지 않음. 앱을 열자마자 권한 창이 뜨지 않게
+  - 화면은 하단 탭에 "알림"을 새로 추가. 다른 사람이 맡은 화면을 고치지 않기 위해
+- 수정한 부분과 이유 / Changed, because:
+  - 비어 있던 `ReminderService`의 생성자를 `{ push, repo }`로 바꿈 (지금까지 쓰는 곳이 없어 영향 없음)
+- 폐기한 부분과 이유 / Rejected, because:
+  - (팀 검토 후 작성)
+
+**검증 방법 / How it was verified**
+- `npm test`: 리마인더 테스트 13개 포함 전체 171개 통과 (`pass 171`, `fail 0`)
+- 완료 조건 대응 테스트: "21:30으로 켜면 매일 21시 30분 알림이 예약되고 DB에 저장된다", "시각을 바꾸면 알림도 새 시각으로 바뀐다", "권한을 거절하면 켜진 것으로 저장하지 않는다"
+- 휴대폰(Expo Go)에서 알림 시각을 1~2분 뒤로 정해 알림이 오는지 확인: (직접 확인 후 작성)
+- 팀에서 정할 것: 오늘 이미 물을 줬으면 그날 알림을 건너뛸지, 시듦 경고(#17) 알림을 같은 화면에서 설정할지
+
+---
 (이슈 단위로 반복 / repeat per issue)
