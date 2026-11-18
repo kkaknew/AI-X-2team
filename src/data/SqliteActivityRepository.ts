@@ -111,4 +111,15 @@ export class SqliteActivityRepository implements ActivityRepository {
     );
     return rows.map(toLog);
   }
+
+  async logsBetween(from: string, to: string): Promise<ActivityLog[]> {
+    // 시각은 모두 toISOString() 형식(UTC)이라 문자열 비교로 구간을 고를 수 있다
+    const rows = await this.db.getAllAsync<LogRow>(
+      `${SELECT_LOG}
+       WHERE l.user_id = ? AND l.started_at >= ? AND l.started_at < ?
+       ORDER BY l.started_at, l.id`,
+      [USER_ID, from, to],
+    );
+    return rows.map(toLog);
+  }
 }
