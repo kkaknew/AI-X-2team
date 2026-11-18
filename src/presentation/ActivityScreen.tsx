@@ -18,6 +18,7 @@ import {
   type RecordResult,
   type WritingEntry,
 } from '../logic/ActivityRecorder';
+import type { CompletedTree, WateringEngine } from '../logic/WateringEngine';
 import type {
   MeditationInput,
   MeditationSession,
@@ -68,11 +69,13 @@ const countChars = (text: string) => Array.from(text.trim()).length;
 export interface ActivityScreenProps {
   /** DB를 여는 동안은 null */
   recorder: ActivityRecorder | null;
+  /** 완성한 나무 수·목록을 보여줄 때 쓴다 (#16). DB를 여는 동안은 null */
+  engine: WateringEngine | null;
   /** 명상 음악 재생과 조작 감지 (#11) */
   meditation: MeditationSession;
 }
 
-export default function ActivityScreen({ recorder, meditation }: ActivityScreenProps) {
+export default function ActivityScreen({ recorder, meditation, engine }: ActivityScreenProps) {
   if (!recorder) {
     return (
       <View style={styles.loading}>
@@ -80,15 +83,65 @@ export default function ActivityScreen({ recorder, meditation }: ActivityScreenP
       </View>
     );
   }
-  return <ActivityForm recorder={recorder} meditation={meditation} />;
+  return <ActivityForm recorder={recorder} meditation={meditation} engine={engine} />;
+}
+
+/**
+ * 완성한 나무 (#16 [14]). 나무가 다 자라 새 씨앗을 심으면 여기에 한 그루씩 쌓인다.
+ * 물을 주거나 새 씨앗을 심으면 다시 읽는다.
+ */
+function CompletedTreesCard({ engine }: { engine: WateringEngine | null }) {
+  const [trees, setTrees] = useState<CompletedTree[] | null>(null);
+
+  useEffect(() => {
+    if (!engine) return;
+    let active = true;
+    const load = () => {
+      engine
+        .completedTrees()
+        .then((list) => {
+          if (active) setTrees(list);
+        })
+        .catch((e) => console.error('[ActivityScreen] 완성한 나무를 읽지 못했습니다', e));
+    };
+    load();
+    const unsubscribe = engine.subscribe(load);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [engine]);
+
+  if (!trees) return null;
+  const day = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`;
+  };
+
+  return (
+    <View style={styles.history} accessibilityLabel={`완성한 나무 ${trees.length}그루`}>
+      <Text style={styles.historyTitle}>🌳 완성한 나무 {trees.length}그루</Text>
+      {trees.length === 0 ? (
+        <Text style={styles.historyItem}>나무가 다 자라면 여기에 기록돼요</Text>
+      ) : (
+        trees.slice(0, 10).map((t, i) => (
+          <Text key={t.id} style={styles.historyItem}>
+            {trees.length - i}번째 나무 · {day(t.plantedAt)} 심음 → {day(t.completedAt)} 완성
+          </Text>
+        ))
+      )}
+    </View>
+  );
 }
 
 function ActivityForm({
   recorder,
   meditation,
+  engine,
 }: {
   recorder: ActivityRecorder;
   meditation: MeditationSession;
+  engine: WateringEngine | null;
 }) {
   const [selected, setSelected] = useState<ActivityCode>('walk');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -159,6 +212,8 @@ function ActivityForm({
         {busy && <ActivityIndicator style={styles.spinner} color="#2f7d4f" />}
         {error && <Text style={styles.error}>{error}</Text>}
         {outcome && <ResultCard outcome={outcome} />}
+
+        <CompletedTreesCard engine={engine} />
       </ScrollView>
     </View>
   );

@@ -24,6 +24,16 @@ export interface GrowthStage {
   waterRequired: number;
 }
 
+/** 완성한 나무 1그루 (#16) */
+export interface CompletedTree {
+  id: number;
+  /** 심은 시각 */
+  plantedAt: string;
+  /** 다 자란 시각 (마지막 단계에 도달한 때) */
+  completedAt: string;
+  waterTotal: number;
+}
+
 /** 물을 준 뒤 저장할 값 */
 export interface WateringUpdate {
   stageId: number;
@@ -38,4 +48,13 @@ export interface TreeRepository {
   getStages(): Promise<GrowthStage[]>;
   /** 물을 준 결과를 저장한다 */
   saveWatering(treeId: number, update: WateringUpdate): Promise<void>;
+  /**
+   * 나무를 완료 처리한다 (#16). 완료 시각은 다 자란 때(마지막으로 물을 받은 시각)로 남기고,
+   * 그 값이 없으면 fallbackAt을 쓴다.
+   */
+  completeTree(treeId: number, fallbackAt: string): Promise<void>;
+  /** 새 씨앗을 심는다 (첫 단계, 물 0). 심은 나무를 돌려준다 (#16) */
+  plantTree(plantedAt: string): Promise<TreeState>;
+  /** 완성한 나무들 (최근에 완성한 것부터) (#16) */
+  listCompletedTrees(): Promise<CompletedTree[]>;
 }

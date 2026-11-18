@@ -1,4 +1,11 @@
-import type { GrowthStage, TreeRepository, TreeState, TreeStatus, WateringUpdate } from './TreeRepository';
+import type {
+  CompletedTree,
+  GrowthStage,
+  TreeRepository,
+  TreeState,
+  TreeStatus,
+  WateringUpdate,
+} from './TreeRepository';
 
 /**
  * 데이터 계층: TreeRepository의 SQLite 구현. (#7)
@@ -68,5 +75,51 @@ export class SqliteTreeRepository implements TreeRepository {
       'UPDATE trees SET stage_id = ?, water_total = ?, last_watered_at = ? WHERE id = ?',
       [update.stageId, update.waterTotal, update.lastWateredAt, treeId],
     );
+  }
+
+  async completeTree(treeId: number, fallbackAt: string): Promise<void> {
+    await this.db.runAsync(
+      `UPDATE trees
+          SET status = 'completed', completed_at = COALESCE(last_watered_at, ?)
+        WHERE id = ? AND status != 'completed'`,
+      [fallbackAt, treeId],
+    );
+  }
+
+  async plantTree(plantedAt: string): Promise<TreeState> {
+    // 같은 사용자의 나무로 심는다. 첫 단계(필요한 물이 가장 적은 단계)부터 시작
+    await this.db.runAsync(
+      `INSERT INTO trees (user_id, stage_id, water_total, status, planted_at)
+       VALUES (
+         COALESCE((SELECT user_id FROM trees ORDER BY id DESC LIMIT 1), (SELECT id FROM users ORDER BY id LIMIT 1)),
+         (SELECT id FROM growth_stages ORDER BY water_required, id LIMIT 1),
+         0, 'growing', ?
+       )`,
+      [plantedAt],
+    );
+    const tree = await this.getActiveTree();
+    if (!tree) throw new Error('새 씨앗을 심지 못했습니다');
+    return tree;
+  }
+
+  async listCompletedTrees(): Promise<CompletedTree[]> {
+    const rows = await this.db.getAllAsync<{
+      id: number;
+      planted_at: string;
+      completed_at: string;
+      water_total: number;
+    }>(
+      `SELECT id, planted_at, completed_at, water_total
+         FROM trees
+        WHERE status = 'completed' AND completed_at IS NOT NULL
+        ORDER BY completed_at DESC, id DESC`,
+      [],
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      plantedAt: r.planted_at,
+      completedAt: r.completed_at,
+      waterTotal: r.water_total,
+    }));
   }
 }

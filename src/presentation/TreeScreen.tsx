@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { TreeProgress, WateringEngine } from '../logic/WateringEngine';
 import { toTreeView } from './treeView';
@@ -12,10 +12,30 @@ export interface TreeScreenProps {
 /**
  * 표현 계층: 현재 성장 단계와 물의 양을 보여준다. (#9 [7] 나무 화면)
  * 화면이 열릴 때 지금 상태를 읽고, 활동이 인증돼 물을 받으면 바로 다시 그린다.
+ * 마지막 단계에 도달하면 완성 축하와 [새 씨앗 심기] 버튼을 보여준다. (#16 [14])
  */
 export default function TreeScreen({ engine }: TreeScreenProps) {
   const [progress, setProgress] = useState<TreeProgress | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
+  const [planting, setPlanting] = useState(false);
+  const [plantError, setPlantError] = useState<string | null>(null);
+
+  const plant = () => {
+    if (!engine || planting) return;
+    setPlanting(true);
+    setPlantError(null);
+    engine
+      .plantNewSeed()
+      .then((p) => {
+        setProgress(p);
+        setState('ready');
+      })
+      .catch((e) => {
+        console.error('[TreeScreen] 새 씨앗을 심지 못했습니다', e);
+        setPlantError('새 씨앗을 심지 못했어요. 다시 눌러 주세요');
+      })
+      .finally(() => setPlanting(false));
+  };
 
   useEffect(() => {
     if (!engine) return;
@@ -79,6 +99,30 @@ export default function TreeScreen({ engine }: TreeScreenProps) {
       <Text style={styles.muted}>{view.nextLabel}</Text>
 
       {view.statusNote && <Text style={styles.wilted}>{view.statusNote}</Text>}
+
+      {progress.isFinalStage && (
+        <View style={styles.complete} accessibilityLiveRegion="polite">
+          <Text style={styles.completeTitle}>🎉 나무가 완성됐어요!</Text>
+          <Text style={styles.completeSub}>
+            새 씨앗을 심으면 완성한 나무로 기록되고, 씨앗부터 다시 키워요.{'\n'}
+            버튼을 안 눌러도 다음 활동을 인증하면 새 씨앗이 심어져요.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: planting }}
+            disabled={planting}
+            onPress={plant}
+            style={[styles.plantButton, planting && styles.dim]}
+          >
+            {planting ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.plantLabel}>🌰 새 씨앗 심기</Text>
+            )}
+          </Pressable>
+          {plantError && <Text style={styles.plantError}>{plantError}</Text>}
+        </View>
+      )}
     </View>
   );
 }
@@ -99,4 +143,25 @@ const styles = StyleSheet.create({
   barFill: { height: '100%', backgroundColor: '#4a90d9' },
   muted: { fontSize: 14, color: '#888888' },
   wilted: { fontSize: 14, color: '#b7791f', marginTop: 16, textAlign: 'center' },
+  complete: {
+    width: '100%',
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#e8f4ec',
+    alignItems: 'center',
+  },
+  completeTitle: { fontSize: 18, fontWeight: '700', color: '#2f7d4f' },
+  completeSub: { fontSize: 13, lineHeight: 19, color: '#555555', textAlign: 'center', marginTop: 6 },
+  plantButton: {
+    marginTop: 14,
+    alignSelf: 'stretch',
+    borderRadius: 10,
+    backgroundColor: '#2f7d4f',
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  plantLabel: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  plantError: { marginTop: 8, fontSize: 13, color: '#b3261e' },
+  dim: { opacity: 0.5 },
 });

@@ -1,4 +1,6 @@
-import type { GrowthStage, TreeRepository, TreeStatus } from '../data/TreeRepository';
+import type { CompletedTree, GrowthStage, TreeRepository, TreeStatus } from '../data/TreeRepository';
+
+export type { CompletedTree };
 
 /**
  * 로직 계층: 인증된 활동 1건당 물을 주고 성장 단계를 올린다. (#7 [5] 물주기)
@@ -9,8 +11,12 @@ import type { GrowthStage, TreeRepository, TreeStatus } from '../data/TreeReposi
  *   보상은 DB의 activity_types.water_reward, 인증 여부는 ActivityVerifier 결과다.
  * - 단계는 누적 물(water_total)이 growth_stages.water_required 이상인 가장 높은 단계다.
  *   기준량은 DB에 있어서, 바꿀 때 이 코드는 고치지 않는다.
- * - 마지막 단계에 도달한 뒤 나무를 완료 처리하고 새 씨앗을 심는 것은 #16 [14]에서 한다.
- *   여기서는 isFinalStage로 알려주기만 한다.
+ * - 나무 완성과 새 씨앗 (#16 [14]):
+ *   마지막 단계에 도달하면 나무 화면에 "다 자랐어요"와 [새 씨앗 심기] 버튼이 뜬다.
+ *   버튼을 누르면(plantNewSeed) 나무를 완료 처리하고 새 씨앗(첫 단계, 물 0)을 심는다.
+ *   버튼을 안 누르고 다음 활동을 인증하면, 물을 주기 전에 같은 일을 하고 새 씨앗에 물을 준다.
+ *   마지막 단계를 넘겨 받은 물은 새 씨앗으로 넘기지 않는다 (팀 결정: 새 씨앗은 항상 물 0부터).
+ *   완료 시각은 다 자란 때(마지막으로 물을 받은 시각)로 남는다.
  * - 물을 줄 때마다 last_watered_at을 갱신한다. 시듦 판정(#17 [15])이 이 값을 쓴다.
  * - 나무 화면(#9 [7])은 getProgress()로 지금 상태를 읽고, subscribe()로 물을 준 직후 새 상태를 받는다.
  */
@@ -138,10 +144,17 @@ export class WateringEngine {
       throw new WateringError(`물 보상은 1 이상의 정수여야 합니다 (${input.waterReward})`);
     }
 
-    const tree = await this.trees.getActiveTree();
+    let tree = await this.trees.getActiveTree();
     if (!tree) throw new WateringError('키우고 있는 나무가 없습니다');
 
     const stages = sortStages(await this.trees.getStages());
+
+    // 이미 다 자란 나무인데 새 씨앗을 아직 안 심었으면, 완료 처리하고 새 씨앗에 물을 준다 (#16)
+    if (input.verified && progressOf(tree, stages).isFinalStage) {
+      await this.trees.completeTree(tree.id, at.toISOString());
+      tree = await this.trees.plantTree(at.toISOString());
+    }
+
     const previousStage = stages.find((s) => s.id === tree.stageId) ?? stageForWater(tree.waterTotal, stages);
 
     const waterGiven = input.verified ? input.waterReward : 0;
@@ -170,6 +183,30 @@ export class WateringEngine {
       nextStage: progress.nextStage,
       waterToNextStage: progress.waterToNextStage,
     };
+  }
+
+  /**
+   * 다 자란 나무를 완료 처리하고 새 씨앗을 심는다. (#16 [14] 나무 화면의 [새 씨앗 심기] 버튼)
+   * 아직 마지막 단계가 아니면 아무것도 하지 않고 지금 상태를 돌려준다. 두 번 눌러도 씨앗은 하나만 심긴다.
+   * 키우는 나무가 아예 없으면 새 씨앗만 심는다.
+   */
+  async plantNewSeed(at: Date = new Date()): Promise<TreeProgress> {
+    const stages = sortStages(await this.trees.getStages());
+    const tree = await this.trees.getActiveTree();
+    if (tree) {
+      const current = progressOf(tree, stages);
+      if (!current.isFinalStage) return current;
+      await this.trees.completeTree(tree.id, at.toISOString());
+    }
+    const seed = await this.trees.plantTree(at.toISOString());
+    const progress = progressOf(seed, stages);
+    this.notify(progress);
+    return progress;
+  }
+
+  /** 지금까지 완성한 나무 (최근에 완성한 것부터) */
+  async completedTrees(): Promise<CompletedTree[]> {
+    return this.trees.listCompletedTrees();
   }
 
   /** 화면 쪽 오류 때문에 이미 저장된 물주기가 실패로 보이지 않도록, 구독자 오류는 기록만 한다 */
