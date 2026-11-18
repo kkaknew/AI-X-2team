@@ -16,6 +16,7 @@ import {
   type ActivityLog,
   type ActivityRecorder,
   type RecordResult,
+  type WritingEntry,
 } from '../logic/ActivityRecorder';
 import type {
   MeditationInput,
@@ -278,20 +279,47 @@ function WritingForm({
   type,
   placeholder,
 }: FormProps & { type: 'diary' | 'reading'; placeholder: string }) {
+  const [title, setTitle] = useState('');
   const [text, setText] = useState('');
+  const [recent, setRecent] = useState<WritingEntry[]>([]);
   const charCount = countChars(text);
+
+  // 지난 일기·독후감은 기기 안 개인 기록 DB에서만 읽어 온다
+  const loadRecent = () => {
+    recorder
+      .recentWritings(type, 20)
+      .then(setRecent)
+      .catch((e) => console.error('[WritingForm] 지난 기록을 읽지 못했습니다', e));
+  };
+  useEffect(loadRecent, [recorder, type]);
 
   const submit = () =>
     run(async () => {
-      // 일기·독후감 본문은 기기 안에만 저장한다 (#10, #12). 판정에는 글자 수만 넘긴다
-      const result =
-        type === 'diary' ? await recorder.recordDiary(text) : await recorder.recordReading('', text);
-      if (result.verified) setText('');
-      return { result, detail: `${charCount}자 작성` };
+      try {
+        // 일기·독후감 본문은 기기 안에만 저장한다 (#10, #12). 판정에는 글자 수만 넘긴다
+        const result =
+          type === 'diary' ? await recorder.recordDiary(text) : await recorder.recordReading(title, text);
+        if (result.verified) {
+          setText('');
+          setTitle('');
+        }
+        return { result, detail: `${charCount}자 작성` };
+      } finally {
+        loadRecent();
+      }
     });
 
   return (
     <>
+      {type === 'reading' && (
+        <TextInput
+          style={[styles.input, styles.titleInput]}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="책 제목 (선택)"
+          maxLength={100}
+        />
+      )}
       <TextInput
         style={styles.textArea}
         multiline
@@ -302,7 +330,47 @@ function WritingForm({
       />
       <Text style={styles.counter}>{charCount}자</Text>
       <Button label="기록하고 인증하기" onPress={submit} disabled={busy} />
+
+      <WritingHistory type={type} entries={recent} />
     </>
+  );
+}
+
+/**
+ * 지난 일기·독후감 목록. 누르면 전체 내용을 펼쳐 보여준다.
+ * 내용은 휴대폰 안에서만 보여주고 저장 위치는 바꾸지 않는다.
+ */
+function WritingHistory({ type, entries }: { type: 'diary' | 'reading'; entries: WritingEntry[] }) {
+  const [openId, setOpenId] = useState<number | null>(null);
+  const noun = type === 'diary' ? '일기' : '독후감';
+
+  return (
+    <View style={styles.history}>
+      <Text style={styles.historyTitle}>
+        지난 {noun} {entries.length > 0 ? `(${entries.length}편)` : ''}
+      </Text>
+      {entries.length === 0 && <Text style={styles.historyItem}>아직 쓴 {noun}이 없어요</Text>}
+      {entries.map((e) => {
+        const open = openId === e.id;
+        return (
+          <Pressable
+            key={e.id}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: open }}
+            onPress={() => setOpenId(open ? null : e.id)}
+            style={styles.entry}
+          >
+            <Text style={styles.entryMeta}>
+              {dateTime(new Date(e.writtenAt))} · {e.charCount}자{open ? '' : '  ▾'}
+            </Text>
+            {e.title !== '' && <Text style={styles.entryTitle}>《{e.title}》</Text>}
+            <Text style={styles.entryBody} numberOfLines={open ? undefined : 2}>
+              {e.body}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -575,4 +643,16 @@ const styles = StyleSheet.create({
   },
   historyTitle: { fontSize: 13, fontWeight: '600', color: '#555555', marginBottom: 6 },
   historyItem: { fontSize: 14, color: '#444444', marginTop: 4 },
+  titleInput: { marginBottom: 8 },
+  entry: {
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dddddd',
+  },
+  entryMeta: { fontSize: 12, color: '#777777' },
+  entryTitle: { marginTop: 4, fontSize: 14, fontWeight: '600', color: '#1d1d1d' },
+  entryBody: { marginTop: 4, fontSize: 14, lineHeight: 20, color: '#333333' },
 });

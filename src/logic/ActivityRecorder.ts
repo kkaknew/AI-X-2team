@@ -1,5 +1,5 @@
 import type { ActivityLog, ActivityRepository } from '../data/ActivityRepository';
-import type { LocalStore, ReadingEntry } from '../data/LocalStore';
+import type { DiaryEntry, LocalStore, ReadingEntry } from '../data/LocalStore';
 import type { LocationRepository, WalkProgress } from '../data/LocationRepository';
 import type { ActivityCode } from '../data/schema';
 import type { ActivityInput, VerificationResult } from './ActivityVerifier';
@@ -21,7 +21,17 @@ import type { WateringInput } from './WateringEngine';
  *   탭을 옮겼다 돌아와도 화면이 다시 이어서 보여줄 수 있다.
  */
 
-export type { ActivityCode, ActivityInput, ActivityLog, ReadingEntry, VerificationResult, WalkProgress };
+export type { ActivityCode, ActivityInput, ActivityLog, DiaryEntry, ReadingEntry, VerificationResult, WalkProgress };
+
+/** 지난 일기·독후감 1편 (화면에서 다시 보기용). 일기는 title이 빈 문자열 */
+export interface WritingEntry {
+  id: number;
+  /** 작성 시각 (ISO 문자열) */
+  writtenAt: string;
+  title: string;
+  body: string;
+  charCount: number;
+}
 
 export interface ActivityRecorderDeps {
   /** 판정기. 보통 new ActivityVerifier() */
@@ -253,6 +263,18 @@ export class ActivityRecorder {
     });
 
     return { ...result, entryId, charCount };
+  }
+
+  /**
+   * 지난 일기 또는 독후감 (최근 것부터). 쓴 내용을 다시 보는 화면에서 쓴다.
+   * 본문은 기기 안 개인 기록 DB에서만 읽고, 다른 곳으로 보내지 않는다. 저장소가 없으면 빈 배열.
+   */
+  async recentWritings(type: 'diary' | 'reading', limit = 20): Promise<WritingEntry[]> {
+    const store = this.deps.localStore;
+    if (!store) return [];
+    if (type === 'reading') return store.listReadings(limit);
+    const diaries = await store.listDiaries(limit);
+    return diaries.map((d) => ({ ...d, title: '' }));
   }
 
   /**
