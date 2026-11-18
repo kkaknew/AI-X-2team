@@ -117,11 +117,20 @@ const READING_REWARD_1 = `
 UPDATE activity_types SET water_reward = 1 WHERE code = 'reading';
 `;
 
+/**
+ * 5번: 명상의 물 보상을 2 → 1로 줄인다. (#11: 명상은 하루 한 번, 물 1)
+ * 이미 설치된 앱도 다음 실행 때 이 값으로 바뀐다.
+ */
+const MEDITATION_REWARD_1 = `
+UPDATE activity_types SET water_reward = 1 WHERE code = 'meditation';
+`;
+
 export const MIGRATIONS: readonly string[] = [
   CREATE_TABLES + SEED,
   DIARY_REWARD_1,
   SLEEP_REWARD_1,
   READING_REWARD_1,
+  MEDITATION_REWARD_1,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
