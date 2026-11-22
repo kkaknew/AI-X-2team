@@ -18,6 +18,7 @@ export type { CompletedTree };
  *   마지막 단계를 넘겨 받은 물은 새 씨앗으로 넘기지 않는다 (팀 결정: 새 씨앗은 항상 물 0부터).
  *   완료 시각은 다 자란 때(마지막으로 물을 받은 시각)로 남는다.
  * - 물을 줄 때마다 last_watered_at을 갱신한다. 시듦 판정(#17 [15])이 이 값을 쓴다.
+ *   시든 나무가 물을 받으면 다시 'growing'으로 돌아온다. 시듦 판정 자체는 WiltingChecker가 한다.
  * - 나무 화면(#9 [7])은 getProgress()로 지금 상태를 읽고, subscribe()로 물을 준 직후 새 상태를 받는다.
  */
 
@@ -45,6 +46,8 @@ export interface WateringResult {
   nextStage: GrowthStage | null;
   /** 다음 단계까지 남은 물. 마지막 단계면 0 */
   waterToNextStage: number;
+  /** 시들었던 나무가 이번 물로 다시 살아났는가 (#17) */
+  revived: boolean;
 }
 
 /** 나무 화면에 보여줄 지금 나무 상태 */
@@ -161,15 +164,20 @@ export class WateringEngine {
     const waterTotal = tree.waterTotal + waterGiven;
     const stage = stageForWater(waterTotal, stages);
 
+    // 시든 나무가 물을 받으면 다시 자란다 (#17)
+    const revived = waterGiven > 0 && tree.status === 'wilted';
+    const status: TreeStatus = revived ? 'growing' : tree.status;
+
     if (waterGiven > 0) {
       await this.trees.saveWatering(tree.id, {
         stageId: stage.id,
         waterTotal,
         lastWateredAt: at.toISOString(),
+        ...(revived ? { status } : {}),
       });
     }
 
-    const progress = progressOf({ ...tree, waterTotal }, stages);
+    const progress = progressOf({ ...tree, waterTotal, status }, stages);
     if (waterGiven > 0) this.notify(progress);
 
     return {
@@ -182,6 +190,7 @@ export class WateringEngine {
       isFinalStage: progress.isFinalStage,
       nextStage: progress.nextStage,
       waterToNextStage: progress.waterToNextStage,
+      revived,
     };
   }
 
@@ -201,6 +210,16 @@ export class WateringEngine {
     const seed = await this.trees.plantTree(at.toISOString());
     const progress = progressOf(seed, stages);
     this.notify(progress);
+    return progress;
+  }
+
+  /**
+   * 지금 상태를 다시 읽어 구독자(나무 화면)에게 알린다.
+   * 시듦 판정(#17)처럼 물주기 밖에서 나무 상태가 바뀌었을 때 부른다.
+   */
+  async refresh(): Promise<TreeProgress | null> {
+    const progress = await this.getProgress();
+    if (progress) this.notify(progress);
     return progress;
   }
 

@@ -1,5 +1,6 @@
 import type { PushClient } from '../data/PushClient';
 import type { ReminderRepository, ReminderSetting } from '../data/ReminderRepository';
+import type { WiltState } from './WiltingChecker';
 
 export type { ReminderSetting };
 
@@ -10,7 +11,7 @@ export type { ReminderSetting };
  * - 설정(시각, 켜짐 여부)은 ReminderRepository(reminders 테이블)에 저장한다.
  * - 알림은 PushClient로 매일 그 시각에 오도록 기기에 예약한다. 서버는 쓰지 않는다.
  * - 앱을 켤 때 restore()로 저장된 설정대로 다시 예약한다 (앱 재설치·업데이트 뒤에도 맞게).
- * 시듦 경고 알림(#17)도 나중에 여기에 붙이면 된다.
+ * - 시듦 경고(#17): 시들기 하루 전(WiltState.warnAt)에 한 번 오는 알림을 예약한다. syncWiltWarning 참고.
  */
 
 /** 처음 설정 화면을 열었을 때 보여줄 기본값. 저장하기 전에는 알림이 오지 않는다 */
@@ -21,6 +22,12 @@ export const WATERING_REMINDER_ID = 'watering-reminder';
 
 export const REMINDER_TITLE = '🌱 오늘 나무에 물 주셨나요?';
 export const REMINDER_BODY = '산책·일기·명상·독서·수면 중 하나를 기록하고 물을 주세요.';
+
+/** 시듦 경고 알림 id. 물을 받을 때마다 같은 id로 다시 예약해서 항상 1개만 남는다 (#17) */
+export const WILT_WARNING_ID = 'wilt-warning';
+/** 압박이나 죄책감을 주지 않도록 부드럽게 쓴다 (ETHICS.md) */
+export const WILT_WARNING_TITLE = '나무가 물을 기다리고 있어요 💧';
+export const WILT_WARNING_BODY = '내일이면 나무가 시들 수 있어요. 산책이나 일기처럼 가벼운 활동 하나로 물을 줘 보세요';
 
 /** 알림 권한이 없어 켤 수 없을 때 */
 export class NotificationPermissionError extends Error {
@@ -46,9 +53,12 @@ export class ReminderService {
   readonly push: PushClient;
   private readonly repo: ReminderRepository;
 
-  constructor(deps: { push: PushClient; repo: ReminderRepository }) {
+  private readonly now: () => number;
+
+  constructor(deps: { push: PushClient; repo: ReminderRepository; now?: () => number }) {
     this.push = deps.push;
     this.repo = deps.repo;
+    this.now = deps.now ?? Date.now;
   }
 
   /** 지금 설정. 저장한 적 없으면 기본값(꺼짐) */
@@ -97,5 +107,21 @@ export class ReminderService {
       title: REMINDER_TITLE,
       body: REMINDER_BODY,
     });
+  }
+
+  /**
+   * 시듦 경고 알림(#17)을 지금 나무 상태에 맞춘다.
+   * - 자라는 중이면 시들기 하루 전(warnAt)에 한 번 오는 알림을 예약한다. 같은 id라 항상 1개만 남는다.
+   * - 이미 시들었거나, 경고 시각이 이미 지났거나, 나무가 없으면 예약을 지운다.
+   * - 권한을 새로 묻지 않는다. 권한이 없으면 예약하지 않는다 (앱을 켜자마자 권한 창이 뜨지 않게).
+   * @returns 예약한 시각. 예약하지 않았으면 null
+   */
+  async syncWiltWarning(state: WiltState | null): Promise<Date | null> {
+    await this.push.cancel(WILT_WARNING_ID);
+    if (!state || state.status !== 'growing') return null;
+    if (state.warnAt.getTime() <= this.now()) return null;
+    if (!(await this.push.hasPermission())) return null;
+    await this.push.scheduleOnce(WILT_WARNING_ID, state.warnAt, WILT_WARNING_TITLE, WILT_WARNING_BODY);
+    return state.warnAt;
   }
 }

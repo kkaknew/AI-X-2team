@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ComponentType } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { describeDatabase, getActivityType, openAppDatabase, openLocalDatabase } from './data/database';
 import { ExpoLocationRepository } from './data/ExpoLocationRepository';
@@ -15,6 +15,7 @@ import { ActivityVerifier } from './logic/ActivityVerifier';
 import { MeditationSession } from './logic/MeditationSession';
 import { ReminderService } from './logic/ReminderService';
 import { WateringEngine } from './logic/WateringEngine';
+import { WiltingChecker } from './logic/WiltingChecker';
 import ActivityScreen, { type ActivityScreenProps } from './presentation/ActivityScreen';
 import HistoryScreen from './presentation/HistoryScreen';
 import ReminderScreen, { type ReminderScreenProps } from './presentation/ReminderScreen';
@@ -37,6 +38,37 @@ const TABS: { key: string; label: string; Screen: ComponentType<ScreenProps> }[]
 ];
 
 /**
+ * 시듦 판정(#17)을 돌린다. 앱을 켤 때, 앱을 다시 앞으로 가져올 때, 물을 받았을 때.
+ * - 시들었으면 나무 화면을 다시 그리게 한다
+ * - 시들기 하루 전 경고 알림을 다시 맞춘다 (물을 받으면 시드는 시각이 뒤로 밀리므로)
+ * @returns 감시를 멈추는 함수
+ */
+function startWiltingWatch(
+  watering: WateringEngine,
+  checker: WiltingChecker,
+  reminders: ReminderService,
+): () => void {
+  const sync = async () => {
+    const state = await checker.check();
+    if (state?.wiltedNow) await watering.refresh();
+    await reminders.syncWiltWarning(state);
+  };
+  const run = () => {
+    sync().catch((e) => console.error('[시듦] 판정 실패', e));
+  };
+
+  run();
+  const unsubscribe = watering.subscribe(run);
+  const appState = AppState.addEventListener('change', (next) => {
+    if (next === 'active') run();
+  });
+  return () => {
+    unsubscribe();
+    appState.remove();
+  };
+}
+
+/**
  * 앱 시작점. 하단 탭으로 세 화면을 오간다.
  * App.tsx는 계층을 조립하는 곳이라 데이터 계층(DB 초기화)을 직접 불러도 된다.
  */
@@ -47,12 +79,14 @@ export default function App() {
   const [reminders, setReminders] = useState<ReminderService | null>(null);
 
   useEffect(() => {
+    let stopWilting: (() => void) | null = null;
     describeDatabase()
       .then((summary) => console.log(`[DB] ${summary}`))
       .catch((e) => console.error('[DB] 초기화 실패', e));
     Promise.all([openAppDatabase(), openLocalDatabase()])
       .then(([db, localDb]) => {
-        const watering = new WateringEngine(new SqliteTreeRepository(db));
+        const trees = new SqliteTreeRepository(db);
+        const watering = new WateringEngine(trees);
         setEngine(watering);
         setRecorder(
           new ActivityRecorder({
@@ -73,8 +107,10 @@ export default function App() {
         reminderService
           .restore()
           .catch((e) => console.error('[알림] 물주기 알림을 다시 예약하지 못했습니다', e));
+        stopWilting = startWiltingWatch(watering, new WiltingChecker(trees), reminderService);
       })
       .catch((e) => console.error('[DB] 물주기 엔진 준비 실패', e));
+    return () => stopWilting?.();
   }, []);
   const { Screen } = TABS[index];
 

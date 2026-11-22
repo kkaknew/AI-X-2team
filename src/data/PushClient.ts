@@ -1,5 +1,5 @@
 /**
- * 데이터 계층: 기기 로컬 알림 예약. (#15 [13] 물주기 리마인더)
+ * 데이터 계층: 기기 로컬 알림 예약. (#15 [13] 물주기 리마인더, #17 시듦 경고)
  * 서버 푸시가 아니라 휴대폰 안에서 예약하는 로컬 알림이다 (CLAUDE.md "데이터 저장" 참고).
  * 알림 서비스 종류(지금은 expo-notifications)는 구현(ExpoPushClient.ts) 안에 숨긴다.
  */
@@ -21,6 +21,9 @@ export interface PushClient {
   requestPermission(): Promise<boolean>;
   /** 매일 같은 시각 알림을 예약한다. 같은 id가 있으면 바꾼다 */
   scheduleDaily(notification: DailyNotification): Promise<void>;
+  /** at 시각에 한 번만 오는 알림을 예약한다. 같은 id가 있으면 바꾼다 (#17 시듦 경고) */
+  scheduleOnce(id: string, at: Date, title: string, body: string): Promise<void>;
   /** 예약한 알림을 취소한다. 없으면 아무것도 하지 않는다 */
+
   cancel(id: string): Promise<void>;
 }

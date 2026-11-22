@@ -14,6 +14,8 @@ export interface TreeState {
   status: TreeStatus;
   /** 마지막으로 물을 받은 시각 (ISO 문자열). 아직 없으면 null */
   lastWateredAt: string | null;
+  /** 씨앗을 심은 시각 (ISO 문자열). 물을 한 번도 안 받았으면 시듦 판정에 이 값을 쓴다 (#17) */
+  plantedAt: string;
 }
 
 /** 성장 단계 1개 (growth_stages 테이블 1행) */
@@ -39,6 +41,8 @@ export interface WateringUpdate {
   stageId: number;
   waterTotal: number;
   lastWateredAt: string;
+  /** 바꿀 상태. 시든 나무가 물을 받아 다시 자라면 'growing' (#17). 없으면 그대로 둔다 */
+  status?: TreeStatus;
 }
 
 export interface TreeRepository {
@@ -57,4 +61,6 @@ export interface TreeRepository {
   plantTree(plantedAt: string): Promise<TreeState>;
   /** 완성한 나무들 (최근에 완성한 것부터) (#16) */
   listCompletedTrees(): Promise<CompletedTree[]>;
+  /** 나무 상태만 바꾼다 (시듦 판정 #17) */
+  setStatus(treeId: number, status: TreeStatus): Promise<void>;
 }
