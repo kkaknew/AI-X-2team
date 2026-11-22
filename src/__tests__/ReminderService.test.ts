@@ -67,6 +67,7 @@ class FakePush implements PushClient {
   async scheduleDaily(n: DailyNotification) {
     this.scheduled.set(n.id, n);
   }
+  async scheduleOnce() {}
   async cancel(id: string) {
     this.scheduled.delete(id);
   }

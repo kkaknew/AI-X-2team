@@ -28,6 +28,7 @@ interface TreeRow {
   water_total: number;
   status: TreeStatus;
   last_watered_at: string | null;
+  planted_at: string;
 }
 
 interface StageRow {
@@ -45,7 +46,7 @@ export class SqliteTreeRepository implements TreeRepository {
 
   async getActiveTree(): Promise<TreeState | null> {
     const row = await this.db.getFirstAsync<TreeRow>(
-      `SELECT id, stage_id, water_total, status, last_watered_at
+      `SELECT id, stage_id, water_total, status, last_watered_at, planted_at
          FROM trees
         WHERE status != 'completed'
         ORDER BY id DESC
@@ -59,6 +60,7 @@ export class SqliteTreeRepository implements TreeRepository {
       waterTotal: row.water_total,
       status: row.status,
       lastWateredAt: row.last_watered_at,
+      plantedAt: toIso(row.planted_at),
     };
   }
 
@@ -72,9 +74,13 @@ export class SqliteTreeRepository implements TreeRepository {
 
   async saveWatering(treeId: number, update: WateringUpdate): Promise<void> {
     await this.db.runAsync(
-      'UPDATE trees SET stage_id = ?, water_total = ?, last_watered_at = ? WHERE id = ?',
-      [update.stageId, update.waterTotal, update.lastWateredAt, treeId],
+      'UPDATE trees SET stage_id = ?, water_total = ?, last_watered_at = ?, status = COALESCE(?, status) WHERE id = ?',
+      [update.stageId, update.waterTotal, update.lastWateredAt, update.status ?? null, treeId],
     );
+  }
+
+  async setStatus(treeId: number, status: TreeStatus): Promise<void> {
+    await this.db.runAsync('UPDATE trees SET status = ? WHERE id = ?', [status, treeId]);
   }
 
   async completeTree(treeId: number, fallbackAt: string): Promise<void> {
@@ -122,4 +128,14 @@ export class SqliteTreeRepository implements TreeRepository {
       waterTotal: r.water_total,
     }));
   }
+}
+
+/**
+ * SQLite의 datetime('now') 값("2026-11-18 02:30:00", UTC)을 ISO 문자열로 바꾼다. (#17)
+ * 그대로 new Date()에 넣으면 기기 현지 시각으로 읽혀 9시간 어긋나기 때문이다. 이미 ISO면 그대로 둔다.
+ */
+export function toIso(sqliteTime: string): string {
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(sqliteTime)
+    ? `${sqliteTime.replace(' ', 'T')}Z`
+    : sqliteTime;
 }

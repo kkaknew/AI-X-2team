@@ -53,7 +53,7 @@ npm run typecheck   # TypeScript 타입 검사
 - 명상: 정해진 클래식 음악이 끝까지 재생되는 동안 다른 조작이 없으면 인정
 - 독서: 독후감을 기준 분량(200자) 이상 쓰면 인정. **물은 하루(휴대폰 날짜) 한 번, 1만** 준다. 200자 미만이어도 저장은 하고 인증만 안 한다. 같은 날 두 번째 독후감부터는 저장·인증만 하고 물은 0 (`ActivityRecorder.recordReading`이 `activity_logs`로 확인)
 - 수면: 취침·기상 시각 기준 시간 이상이면 인정. **하루(일어난 날짜, 휴대폰 시간대) 한 번만 기록**하고 물은 **1** 준다. 같은 날 두 번째 수면은 기록하지 않는다 (`ActivityRecorder.recordSleep`이 `activity_logs`로 확인)
-- 시듦: 마지막 인증 후 기준 기간(예: 3일) 경과 시 시듦, 하루 전 경고 푸시
+- 시듦: 마지막으로 물을 받은 시각(없으면 심은 시각)부터 **3일**(`WILT_AFTER_DAYS`)이 지나면 `wilted`. 앱을 켤 때·앞으로 가져올 때·물을 받았을 때 `WiltingChecker.check()`로 판정한다. 시든 나무가 물을 받으면 `WateringEngine`이 `growing`으로 되돌린다. 시들기 하루 전 기기 로컬 알림 1개(`ReminderService.syncWiltWarning` → `PushClient.scheduleOnce`)
 
 ## 개인정보 원칙
 

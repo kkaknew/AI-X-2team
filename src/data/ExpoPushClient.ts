@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import type { DailyNotification, PushClient } from './PushClient';
 
 /**
- * 데이터 계층: PushClient의 expo-notifications 구현. (#15)
+ * 데이터 계층: PushClient의 expo-notifications 구현. (#15, #17)
  * 서버를 거치지 않는 기기 로컬 알림만 쓴다. 푸시 토큰은 받지 않는다.
  */
 
@@ -55,6 +55,20 @@ export class ExpoPushClient implements PushClient {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour,
         minute,
+        channelId: CHANNEL_ID,
+      },
+    });
+  }
+
+  async scheduleOnce(id: string, at: Date, title: string, body: string): Promise<void> {
+    await this.ensureChannel();
+    await Notifications.cancelScheduledNotificationAsync(id);
+    await Notifications.scheduleNotificationAsync({
+      identifier: id,
+      content: { title, body },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: at,
         channelId: CHANNEL_ID,
       },
     });
