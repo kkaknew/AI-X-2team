@@ -14,15 +14,16 @@ import { ActivityRecorder } from './logic/ActivityRecorder';
 import { ActivityVerifier } from './logic/ActivityVerifier';
 import { MeditationSession } from './logic/MeditationSession';
 import { ReminderService } from './logic/ReminderService';
+import { StatsService } from './logic/StatsService';
 import { WateringEngine } from './logic/WateringEngine';
 import { WiltingChecker } from './logic/WiltingChecker';
 import ActivityScreen, { type ActivityScreenProps } from './presentation/ActivityScreen';
-import HistoryScreen from './presentation/HistoryScreen';
+import HistoryScreen, { type HistoryScreenProps } from './presentation/HistoryScreen';
 import ReminderScreen, { type ReminderScreenProps } from './presentation/ReminderScreen';
 import TreeScreen, { type TreeScreenProps } from './presentation/TreeScreen';
 
 /** 모든 화면에 같은 로직 객체를 넘긴다. 쓰지 않는 화면은 무시한다 */
-type ScreenProps = TreeScreenProps & ActivityScreenProps & ReminderScreenProps;
+type ScreenProps = TreeScreenProps & ActivityScreenProps & HistoryScreenProps & ReminderScreenProps;
 
 /** 산책 중 탭을 옮겨도 산책이 이어지도록 위치 저장소는 앱 전체에서 하나만 쓴다 */
 const location = new ExpoLocationRepository();
@@ -77,6 +78,7 @@ export default function App() {
   const [engine, setEngine] = useState<WateringEngine | null>(null);
   const [recorder, setRecorder] = useState<ActivityRecorder | null>(null);
   const [reminders, setReminders] = useState<ReminderService | null>(null);
+  const [stats, setStats] = useState<StatsService | null>(null);
 
   useEffect(() => {
     let stopWilting: (() => void) | null = null;
@@ -87,14 +89,16 @@ export default function App() {
       .then(([db, localDb]) => {
         const trees = new SqliteTreeRepository(db);
         const watering = new WateringEngine(trees);
+        const activities = new SqliteActivityRepository(db);
         setEngine(watering);
+        setStats(new StatsService({ activities }));
         setRecorder(
           new ActivityRecorder({
             verifier: new ActivityVerifier(),
             loadActivityType: getActivityType,
             water: (input) => watering.water(input),
             location,
-            activities: new SqliteActivityRepository(db),
+            activities,
             localStore: new SqliteLocalStore(localDb),
           }),
         );
@@ -117,7 +121,13 @@ export default function App() {
   return (
     <View style={styles.container}>
       <View style={styles.body}>
-        <Screen engine={engine} recorder={recorder} meditation={meditation} reminders={reminders} />
+        <Screen
+          engine={engine}
+          recorder={recorder}
+          meditation={meditation}
+          stats={stats}
+          reminders={reminders}
+        />
       </View>
       <View style={styles.tabBar}>
         {TABS.map((tab, i) => (
