@@ -24,6 +24,10 @@ export interface ActivityItem {
 export interface DayRow {
   /** "오늘", "어제", "11/16 (월)" */
   label: string;
+  /** 내 기록 화면 줄 이름: "오늘", "어제", 그 전은 요일 "월" */
+  short: string;
+  /** "11/16" */
+  date: string;
   count: number;
   water: number;
   /** 최근 7일 중 가장 많이 한 날을 1로 본 막대 길이 (0~1) */
@@ -49,6 +53,14 @@ export function dayLabel(day: string, today: string): string {
   return `${m}/${d} (${WEEKDAYS[date.getDay()]})`;
 }
 
+/** "오늘", "어제", 그 전은 요일 한 글자 */
+export function shortLabel(day: string, today: string): string {
+  const label = dayLabel(day, today);
+  if (label === '오늘' || label === '어제') return label;
+  const [y, m, d] = day.split('-').map(Number);
+  return WEEKDAYS[new Date(y, m - 1, d).getDay()];
+}
+
 /** @param week StatsService.lastDays(7)의 결과. 마지막 날이 오늘이다 */
 export function toHistoryView(week: PeriodStats): HistoryView {
   const today = week.days[week.days.length - 1];
@@ -62,6 +74,8 @@ export function toHistoryView(week: PeriodStats): HistoryView {
       // 최근 날짜가 위로 오게
       days: [...week.days].reverse().map((d) => ({
         label: dayLabel(d.day, today.day),
+        short: shortLabel(d.day, today.day),
+        date: d.day.slice(5).replace('-', '/').replace(/^0/, '').replace('/0', '/'),
         count: d.count,
         water: d.water,
         ratio: d.count / max,

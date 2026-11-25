@@ -284,7 +284,11 @@ export class ActivityRecorder {
    *    그날 두 번째 명상부터는 인증은 되지만 물은 0. 앱을 껐다 켜도 activity_logs로 확인한다.
    * 3. activity_logs에 "명상, 인증 여부, 받은 물"을 남긴다.
    */
-  async recordMeditation(input: Extract<ActivityInput, { type: 'meditation' }>): Promise<RecordResult> {
+  async recordMeditation(
+    input: Extract<ActivityInput, { type: 'meditation' }>,
+    /** 실제로 음악을 들은 시간(초). 명상 열매의 "총 시간"에 쓴다 (#11 후속) */
+    playedSec?: number,
+  ): Promise<RecordResult> {
     const finishedAt = new Date(this.now());
     const alreadyWatered = await this.wateredToday('meditation', finishedAt);
 
@@ -298,7 +302,7 @@ export class ActivityRecorder {
       type: 'meditation',
       startedAt: finishedAt.toISOString(),
       endedAt: null,
-      durationMin: null,
+      durationMin: playedSec === undefined ? null : Math.round(playedSec / 60),
       verified: result.verified,
       waterGiven: result.waterGiven,
     });
@@ -326,6 +330,29 @@ export class ActivityRecorder {
   /** 최근 수면 기록 (최근 것부터). 저장소가 없으면 빈 배열 */
   async recentSleeps(limit = 3): Promise<ActivityLog[]> {
     return this.deps.activities ? this.deps.activities.recentLogs('sleep', limit) : [];
+  }
+
+  /**
+   * 잔 시간으로 인증될지 미리 본다 (수면 기록 화면의 "인증 가능" 칩). 기록·물주기는 하지 않는다.
+   * 기준은 판정기가 activity_types.rule로 정한다.
+   */
+  async previewSleep(durationMin: number): Promise<VerificationResult> {
+    const { rule } = await this.deps.loadActivityType('sleep');
+    return this.deps.verifier.verify({ type: 'sleep', durationMin }, rule);
+  }
+
+  /**
+   * 일기·독후감이 인증되는 최소 글자 수 (activity_types.rule의 min_char_count).
+   * 화면의 "90 / 200자", "110자 더 쓰면 인증돼요"에 쓴다. 기준을 읽지 못하면 0.
+   */
+  async writingGoal(type: 'diary' | 'reading'): Promise<number> {
+    const { rule } = await this.deps.loadActivityType(type);
+    try {
+      const value = (JSON.parse(rule) as { min_char_count?: unknown }).min_char_count;
+      return typeof value === 'number' && value > 0 ? value : 0;
+    } catch {
+      return 0;
+    }
   }
 
   /** 산책 시작. 위치 권한이 없으면 에러를 던진다 (메시지를 화면에 그대로 보여주면 된다). */
@@ -357,11 +384,37 @@ export class ActivityRecorder {
     };
   }
 
-  /** 산책 종료 후 판정. 좌표는 데이터 계층에서 이미 버려졌고 거리·시간만 넘어온다. */
-  async finishWalk(): Promise<WalkResult> {
+  /** 산책을 기록하지 않고 그만둔다 (확인 창의 "포기할게요"). 거리·시간은 버린다 */
+  async cancelWalk(): Promise<void> {
+    if (!this.walk) return;
     this.walk = null;
-    const { distanceM, durationSec } = await this.deps.location.stopWalk();
+    await this.deps.location.stopWalk();
+  }
+
+  /**
+   * 산책 종료 후 판정. 좌표는 데이터 계층에서 이미 버려졌고 거리·시간만 넘어온다.
+   * 결과를 activity_logs에 남긴다 (산책 열매의 총 횟수·총 거리, 기록 조회). 좌표는 남기지 않는다.
+   */
+  async finishWalk(): Promise<WalkResult> {
+    const startedMs = this.walk?.startedAt;
+    this.walk = null;
+    const summary = await this.deps.location.stopWalk();
+    const { distanceM, durationSec } = summary;
     const result = await this.record({ type: 'walk', distanceM, durationSec });
+
+    const endedAt = summary.endedAt || new Date(this.now()).toISOString();
+    const startedAt =
+      summary.startedAt ||
+      new Date(startedMs ?? new Date(endedAt).getTime() - durationSec * 1000).toISOString();
+    await this.deps.activities?.addLog({
+      type: 'walk',
+      startedAt,
+      endedAt,
+      durationMin: Math.round(durationSec / 60),
+      distanceM: Math.round(distanceM),
+      verified: result.verified,
+      waterGiven: result.waterGiven,
+    });
     return { distanceM, durationSec, result };
   }
 }

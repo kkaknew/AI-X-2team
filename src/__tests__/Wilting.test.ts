@@ -10,7 +10,7 @@ import type { SqlDatabase, SqlValue } from '../data/SqliteTreeRepository.ts';
 import { ReminderService, WATERING_REMINDER_ID, WILT_WARNING_ID } from '../logic/ReminderService.ts';
 import { WateringEngine } from '../logic/WateringEngine.ts';
 import { WILT_AFTER_DAYS, WiltingChecker } from '../logic/WiltingChecker.ts';
-import { toTreeView } from '../presentation/treeView.ts';
+import { toMainView } from '../presentation/mainView.ts';
 
 /**
  * #17 [15] 시듦 판정
@@ -183,7 +183,9 @@ describe('나무 화면 표시', () => {
     await checker.check(at(3 * DAY));
     const progress = await engine.getProgress();
     assert.equal(progress?.status, 'wilted');
-    assert.match(toTreeView(progress!).statusNote ?? '', /시들었어요/);
+    const view = toMainView(progress!, { todayCount: 0, doneTypes: [], completedCount: 0, now: new Date() });
+    assert.equal(view.mode, 'wilted');
+    assert.match(view.status.title, /시들었어요/);
   });
 
   test('refresh()는 시든 상태를 구독자(나무 화면)에게 바로 알린다', async () => {

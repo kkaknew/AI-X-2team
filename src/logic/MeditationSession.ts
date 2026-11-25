@@ -54,10 +54,10 @@ export class MeditationSession {
 
   /**
    * 음악을 틀고 명상을 시작한다.
-   * @param onFinish 음악이 끝까지 재생되면 그동안 모은 사실과 함께 한 번 불린다
+   * @param onFinish 음악이 끝까지 재생되면 그동안 모은 사실, 실제로 들은 시간(초)과 함께 한 번 불린다
    * @returns 진행 상태 (남은 시간 표시용)
    */
-  async start(onFinish: (input: MeditationInput) => void): Promise<MeditationState> {
+  async start(onFinish: (input: MeditationInput, playedSec: number) => void): Promise<MeditationState> {
     if (this.state) throw new Error('이미 명상 중입니다');
     const run = ++this.run;
     this.touched = false;
@@ -65,7 +65,8 @@ export class MeditationSession {
 
     const { durationSec } = await this.deps.player.play(() => {
       if (run !== this.run || !this.state) return;
-      onFinish(this.finish(true));
+      const playedSec = Math.max(0, Math.round((this.now() - this.state.startedAt) / 1000));
+      onFinish(this.finish(true), playedSec);
     });
 
     // 곡을 불러오는 동안 취소됐으면 시작하지 않는다

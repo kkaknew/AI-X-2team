@@ -1,0 +1,20 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="28" height="40" viewBox="0 0 28 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="&#235;&#172;&#188;&#235;&#176;&#169;&#236;&#154;&#184;">
+<g id="&#235;&#172;&#188;&#235;&#176;&#169;&#236;&#154;&#184; &#235;&#176;&#148;&#237;&#131;&#149;">
+<path d="M14 0C14 0 28 15.7143 28 25.7143C28 33.5714 21.7 40 14 40C6.3 40 0 33.5714 0 25.7143C0 15.7143 14 0 14 0Z" fill="url(#paint0_linear_0_129)"/>
+<mask id="stroke0_0_129" fill="white">
+<path d="M14 0C14 0 28 15.7143 28 25.7143C28 33.5714 21.7 40 14 40C6.3 40 0 33.5714 0 25.7143C0 15.7143 14 0 14 0Z"/>
+</mask>
+<path d="M14 0C14 0 28 15.7143 28 25.7143C28 33.5714 21.7 40 14 40C6.3 40 0 33.5714 0 25.7143C0 15.7143 14 0 14 0Z" stroke-width="3" stroke="#8FBAD6" mask="url(#stroke0_0_129)"/>
+</g>
+<ellipse id="&#237;&#149;&#152;&#236;&#157;&#180;&#235;&#157;&#188;&#236;&#157;&#180;&#237;&#138;&#184;" cx="9.38097" cy="23.8819" rx="2.5" ry="4.5" transform="rotate(-12 9.38097 23.8819)" fill="white" fill-opacity="0.55"/>
+</g>
+<defs>
+<linearGradient id="paint0_linear_0_129" x1="14" y1="0" x2="14" y2="40" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FCFAF5"/>
+<stop offset="0.28" stop-color="#FCFAF5"/>
+<stop offset="0.28" stop-color="#7AB8DC"/>
+<stop offset="1" stop-color="#7AB8DC"/>
+</linearGradient>
+</defs>
+</svg>
