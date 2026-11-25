@@ -7,13 +7,13 @@ import { SqliteTreeRepository } from '../data/SqliteTreeRepository.ts';
 import type { SqlDatabase, SqlValue } from '../data/SqliteTreeRepository.ts';
 import type { TreeProgress } from '../logic/WateringEngine.ts';
 import { WateringEngine } from '../logic/WateringEngine.ts';
-import { toTreeView } from '../presentation/treeView.ts';
+import { stagePercent } from '../presentation/mainView.ts';
 
 /**
  * #9 [7] 나무 화면
  * 완료 조건: 현재 성장 단계와 물의 양이 표시되고, 활동 인증 직후 갱신된다.
  *
- * 화면(TreeScreen.tsx)은 getProgress()로 읽은 상태를 toTreeView()로 바꿔 그리고,
+ * 화면(TreeScreen.tsx)은 getProgress()로 읽은 상태를 mainView.ts로 바꿔 그리고,
  * subscribe()로 물을 준 직후 새 상태를 받는다. 이 두 부분을 앱과 같은 DB 초기 데이터로 확인한다.
  * 지금 성장 단계: 씨앗 0 → 새싹 10 → 묘목 30 → 어린 나무 60 → 나무 100 (누적 물)
  */
@@ -37,50 +37,51 @@ function setup() {
 
 const verified = (waterReward: number) => ({ verified: true, waterReward });
 
-async function viewNow(engine: WateringEngine) {
+async function progressNow(engine: WateringEngine) {
   const p = await engine.getProgress();
   assert.ok(p, '키우는 나무가 있어야 한다');
-  return toTreeView(p);
+  return p;
 }
 
 describe('성장 단계와 물의 양 표시', () => {
   test('처음에는 씨앗, 물 0, 새싹까지 10 남음', async () => {
     const { engine } = setup();
-    const view = await viewNow(engine);
-    assert.equal(view.stageName, '씨앗');
-    assert.equal(view.stageLabel, '1 / 5단계');
-    assert.equal(view.waterLabel, '물 0');
-    assert.equal(view.nextLabel, '새싹까지 물 10 남았어요');
-    assert.equal(view.progress, 0);
-    assert.equal(view.icon, '🌰');
+    const p = await progressNow(engine);
+    assert.equal(p.stage.name, '씨앗');
+    assert.equal(p.stageNumber, 1);
+    assert.equal(p.stageCount, 5);
+    assert.equal(p.waterTotal, 0);
+    assert.equal(p.nextStage?.name, '새싹');
+    assert.equal(p.waterToNextStage, 10);
+    assert.equal(stagePercent(p), 0);
   });
 
-  test('물 13이면 새싹, 묘목까지 17 남음, 진행 막대는 새싹→묘목 구간 기준 (3/20)', async () => {
+  test('물 13이면 새싹, 묘목까지 17 남음, 게이지는 새싹→묘목 구간 기준 (3/20 → 15%)', async () => {
     const { engine } = setup();
     await engine.water(verified(13));
-    const view = await viewNow(engine);
-    assert.equal(view.stageName, '새싹');
-    assert.equal(view.stageLabel, '2 / 5단계');
-    assert.equal(view.waterLabel, '물 13');
-    assert.equal(view.nextLabel, '묘목까지 물 17 남았어요');
-    assert.equal(view.progress, 3 / 20);
+    const p = await progressNow(engine);
+    assert.equal(p.stage.name, '새싹');
+    assert.equal(p.stageNumber, 2);
+    assert.equal(p.waterTotal, 13);
+    assert.equal(p.nextStage?.name, '묘목');
+    assert.equal(p.waterToNextStage, 17);
+    assert.equal(stagePercent(p), 15);
   });
 
-  test('마지막 단계면 진행 막대가 꽉 차고 다 자랐다고 보여준다', async () => {
+  test('마지막 단계면 게이지가 꽉 차고 다음 단계가 없다', async () => {
     const { engine } = setup();
     await engine.water(verified(100));
-    const view = await viewNow(engine);
-    assert.equal(view.stageName, '나무');
-    assert.equal(view.icon, '🌳');
-    assert.equal(view.progress, 1);
-    assert.equal(view.nextLabel, '다 자랐어요!');
+    const p = await progressNow(engine);
+    assert.equal(p.stage.name, '나무');
+    assert.equal(p.nextStage, null);
+    assert.equal(stagePercent(p), 100);
   });
 
-  test('시든 나무면 안내 문구를 보여주고, 아니면 보여주지 않는다', async () => {
+  test('시든 나무면 상태가 wilted로 보인다', async () => {
     const { db, engine } = setup();
-    assert.equal((await viewNow(engine)).statusNote, null);
+    assert.equal((await progressNow(engine)).status, 'growing');
     db.exec("UPDATE trees SET status = 'wilted'");
-    assert.match((await viewNow(engine)).statusNote ?? '', /시들었어요/);
+    assert.equal((await progressNow(engine)).status, 'wilted');
   });
 
   test('키우는 나무가 없으면 getProgress는 null (화면은 "나무가 없어요")', async () => {
@@ -98,11 +99,11 @@ describe('활동 인증 직후 갱신', () => {
 
     await engine.water(verified(3));
     assert.equal(received.length, 1);
-    assert.equal(toTreeView(received[0]).waterLabel, '물 3');
+    assert.equal(received[0].waterTotal, 3);
 
     await engine.water(verified(7)); // 10 → 새싹
     assert.equal(received.length, 2);
-    assert.equal(toTreeView(received[1]).stageName, '새싹');
+    assert.equal(received[1].stage.name, '새싹');
   });
 
   test('받은 상태는 DB에서 다시 읽은 상태와 같다', async () => {

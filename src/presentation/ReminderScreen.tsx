@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
-import {
-  parseReminderTime,
-  REMINDER_BODY,
-  REMINDER_TITLE,
-  type ReminderService,
-  type ReminderSetting,
-} from '../logic/ReminderService';
+import { type ReminderService, type ReminderSetting } from '../logic/ReminderService';
+import { TimeWheel } from './activity/TimeWheel';
+import { fromWheel, toWheel, type WheelTime } from './activityView';
+import { colors, ErrorMessage, fontSize, Loading, radius, weight } from './ui';
 
 /**
  * 표현 계층: 물주기 리마인더 설정. (#15 [13] 물주기 리마인더)
- * 매일 알림 받을 시각을 정하고 켜고 끈다. 저장·예약은 ReminderService가 한다.
+ * 시안 "내 기록"의 "알림 설정" 카드: 물주기 알림 켜고 끄기, 매일 알림 시각(눌러서 휠로 바꾸기).
+ * 저장·예약은 ReminderService가 한다.
  */
 
 export interface ReminderScreenProps {
@@ -19,178 +17,138 @@ export interface ReminderScreenProps {
   reminders: ReminderService | null;
 }
 
-const GREEN = '#2f7d4f';
-
-export default function ReminderScreen({ reminders }: ReminderScreenProps) {
-  if (!reminders) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={GREEN} />
-      </View>
-    );
-  }
-  return <ReminderForm reminders={reminders} />;
+/** "21:00" → "오후 9:00" */
+function timeLabel(time: string): string {
+  const w = toWheel(time);
+  return `${w.meridiem} ${w.hour}:${String(w.minute).padStart(2, '0')}`;
 }
 
-function ReminderForm({ reminders }: { reminders: ReminderService }) {
-  /** 저장된 설정 (null이면 읽는 중) */
+export default function ReminderScreen({ reminders }: ReminderScreenProps) {
   const [saved, setSaved] = useState<ReminderSetting | null>(null);
-  const [time, setTime] = useState('');
-  const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [picking, setPicking] = useState<WheelTime | null>(null);
 
   useEffect(() => {
+    if (!reminders) return;
     reminders
       .getSetting()
-      .then((s) => {
-        setSaved(s);
-        setTime(s.time);
-        setEnabled(s.enabled);
-      })
+      .then(setSaved)
       .catch((e) => {
         console.error('[ReminderScreen] 알림 설정을 읽지 못했습니다', e);
-        setMessage({ ok: false, text: '알림 설정을 읽지 못했어요' });
+        setError('알림 설정을 읽지 못했어요');
       });
   }, [reminders]);
 
-  const save = (nextTime: string, nextEnabled: boolean) => {
+  const save = (time: string, enabled: boolean) => {
+    if (!reminders) return;
     setBusy(true);
+    setError(null);
     setMessage(null);
     reminders
-      .update(nextTime, nextEnabled)
+      .update(time, enabled)
       .then((s) => {
         setSaved(s);
-        setTime(s.time);
-        setEnabled(s.enabled);
-        setMessage({
-          ok: true,
-          text: s.enabled ? `매일 ${s.time}에 알려드릴게요` : '물주기 알림을 껐어요',
-        });
+        setMessage(s.enabled ? `매일 ${timeLabel(s.time)}에 알려드릴게요` : '물주기 알림을 껐어요');
       })
-      .catch((e) => {
-        // 실패하면 스위치를 저장된 상태로 되돌린다
-        if (saved) setEnabled(saved.enabled);
-        setMessage({ ok: false, text: e instanceof Error ? e.message : '저장하지 못했어요' });
-      })
+      .catch((e) => setError(e instanceof Error ? e.message : '저장하지 못했어요'))
       .finally(() => setBusy(false));
   };
 
-  if (!saved) {
-    return (
-      <View style={styles.center}>
-        {message ? <Text style={styles.error}>{message.text}</Text> : <ActivityIndicator color={GREEN} />}
-      </View>
-    );
-  }
-
-  const valid = parseReminderTime(time) !== null;
-  const changed = time !== saved.time || enabled !== saved.enabled;
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>물주기 알림</Text>
-      <Text style={styles.hint}>정한 시각에 매일 알림이 와요. 알림은 휴대폰 안에서만 예약돼요.</Text>
-
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Text style={styles.label}>알림 받기</Text>
-          <Switch
-            value={enabled}
-            disabled={busy}
-            onValueChange={(v) => {
-              setEnabled(v);
-              // 켜고 끄기는 바로 저장한다 (시각이 맞을 때만)
-              if (valid) save(time, v);
-            }}
-            trackColor={{ true: '#9fd0b0', false: '#cccccc' }}
-            thumbColor={enabled ? GREEN : '#f4f4f4'}
-            accessibilityLabel="물주기 알림 받기"
-          />
-        </View>
-
-        <View style={[styles.row, styles.rowTop]}>
-          <Text style={styles.label}>알림 시각</Text>
-          <TextInput
-            style={[styles.input, !valid && styles.inputInvalid]}
-            value={time}
-            onChangeText={setTime}
-            placeholder="21:00"
-            keyboardType="numbers-and-punctuation"
-            maxLength={5}
-            editable={!busy}
-            accessibilityLabel="알림 시각, 시:분"
-          />
-        </View>
-        {!valid && <Text style={styles.error}>시각을 21:00처럼 "시:분" 형식으로 입력해 주세요</Text>}
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: busy || !valid || !changed }}
-          disabled={busy || !valid || !changed}
-          onPress={() => save(time, enabled)}
-          style={[styles.button, (busy || !valid || !changed) && styles.dim]}
-        >
-          <Text style={styles.buttonLabel}>저장</Text>
-        </Pressable>
-      </View>
-
-      {busy && <ActivityIndicator style={styles.spinner} color={GREEN} />}
-      {message && (
-        <Text accessibilityLiveRegion="polite" style={message.ok ? styles.ok : styles.error}>
-          {message.text}
-        </Text>
+    <View style={styles.card}>
+      <Text style={styles.title}>알림 설정</Text>
+      {!saved ? (
+        error ? <ErrorMessage message={error} variant="card" /> : <Loading />
+      ) : (
+        <>
+          <View style={styles.row}>
+            <View style={styles.texts}>
+              <Text style={styles.label}>물주기 알림</Text>
+              <Text style={styles.sub}>정한 시각에 매일 알려드려요</Text>
+            </View>
+            <Switch
+              value={saved.enabled}
+              disabled={busy}
+              onValueChange={(v) => save(saved.time, v)}
+              trackColor={{ true: colors.brown, false: colors.border }}
+              thumbColor={colors.surface}
+              accessibilityLabel="물주기 알림 받기"
+            />
+          </View>
+          <View style={[styles.row, styles.rowLine]}>
+            <View style={styles.texts}>
+              <Text style={styles.label}>매일 알림 시각</Text>
+              <Text style={styles.sub}>바꾸려면 눌러요</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`알림 시각 ${timeLabel(saved.time)}, 바꾸기`}
+              disabled={busy}
+              onPress={() => setPicking(toWheel(saved.time))}
+              style={styles.timeChip}
+            >
+              <Text style={styles.timeText}>{timeLabel(saved.time)} ›</Text>
+            </Pressable>
+          </View>
+          {busy && <Loading size="screen" />}
+          {message && <Text style={styles.ok}>{message}</Text>}
+          {error && <ErrorMessage message={error} />}
+        </>
       )}
 
-      <View style={styles.preview}>
-        <Text style={styles.previewLabel}>이런 알림이 와요</Text>
-        <Text style={styles.previewTitle}>{REMINDER_TITLE}</Text>
-        <Text style={styles.previewBody}>{REMINDER_BODY}</Text>
-      </View>
+      <Modal visible={picking !== null} transparent animationType="fade" onRequestClose={() => setPicking(null)}>
+        <View style={styles.backdrop}>
+          <View style={styles.picker}>
+            <Text style={styles.label}>매일 알림 시각</Text>
+            {picking && <TimeWheel value={picking} onChange={setPicking} accent={colors.brown} />}
+            <View style={styles.buttons}>
+              <Pressable accessibilityRole="button" onPress={() => setPicking(null)} style={[styles.button, styles.cancel]}>
+                <Text style={styles.cancelText}>취소</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  if (picking && saved) save(fromWheel(picking), true);
+                  setPicking(null);
+                }}
+                style={[styles.button, styles.confirm]}
+              >
+                <Text style={styles.confirmText}>저장</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  container: { flex: 1, padding: 20 },
-  title: { fontSize: 20, fontWeight: '700', color: '#1d1d1d' },
-  hint: { marginTop: 6, marginBottom: 16, fontSize: 14, lineHeight: 20, color: '#555555' },
-  card: { borderRadius: 14, backgroundColor: '#f6f6f6', padding: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowTop: { marginTop: 16 },
-  label: { fontSize: 16, color: '#1d1d1d' },
-  input: {
-    width: 110,
-    borderRadius: 10,
+  card: {
+    gap: 10,
+    padding: 16,
+    borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: '#dddddd',
-    backgroundColor: '#ffffff',
-    padding: 10,
-    fontSize: 18,
-    textAlign: 'center',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  inputInvalid: { borderColor: '#b3261e' },
-  button: {
-    marginTop: 16,
-    borderRadius: 10,
-    backgroundColor: GREEN,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  buttonLabel: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-  dim: { opacity: 0.4 },
-  spinner: { marginTop: 16 },
-  ok: { marginTop: 16, fontSize: 14, color: GREEN },
-  error: { marginTop: 8, fontSize: 14, color: '#b3261e' },
-  preview: {
-    marginTop: 24,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#dddddd',
-    padding: 14,
-  },
-  previewLabel: { fontSize: 12, color: '#777777', marginBottom: 6 },
-  previewTitle: { fontSize: 15, fontWeight: '600', color: '#1d1d1d' },
-  previewBody: { marginTop: 2, fontSize: 14, color: '#555555' },
+  title: { fontSize: fontSize.cardTitle, fontWeight: weight.bold, color: colors.text },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 12 },
+  texts: { flex: 1, gap: 2 },
+  label: { fontSize: fontSize.reason, fontWeight: weight.bold, color: colors.text },
+  sub: { fontSize: fontSize.caption, color: colors.textMuted },
+  timeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.surfaceMuted },
+  timeText: { fontSize: fontSize.small, fontWeight: weight.bold, color: colors.text },
+  ok: { fontSize: fontSize.small, color: colors.text },
+  backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: 'rgba(59, 61, 52, 0.4)' },
+  picker: { width: '100%', maxWidth: 320, gap: 12, padding: 20, borderRadius: radius.card, backgroundColor: colors.background },
+  buttons: { flexDirection: 'row', gap: 8 },
+  button: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: radius.inner },
+  cancel: { borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  confirm: { backgroundColor: colors.brown },
+  cancelText: { fontSize: fontSize.small, fontWeight: weight.bold, color: colors.text },
+  confirmText: { fontSize: fontSize.small, fontWeight: weight.bold, color: colors.textOnBrown },
 });

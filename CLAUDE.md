@@ -26,7 +26,7 @@ npm run typecheck   # TypeScript 타입 검사
 
 | 계층 | 폴더 | 모듈 | 의존하지 않는 것 |
 |---|---|---|---|
-| 표현 | `src/presentation/` | `ActivityScreen`, `TreeScreen`, `HistoryScreen` | 인증 규칙, 성장·시듦 규칙, 데이터 출처 |
+| 표현 | `src/presentation/` | `TreeScreen`(메인), `ActivityScreen`, `RecordsScreen`, `CompletionScreen` | 인증 규칙, 성장·시듦 규칙, 데이터 출처 |
 | 로직 | `src/logic/` | `ActivityVerifier`, `WateringEngine`, `WiltingChecker`, `StatsService`, `ReminderService` | 화면 종류, 저장 방식, 푸시 서비스 종류 |
 | 데이터 | `src/data/` | `LocationRepository`, `LocalStore`, `ActivityRepository`, `TreeRepository`, `PushClient` | 인증 규칙, 성장·시듦 규칙, 화면 구성 |
 
@@ -35,6 +35,17 @@ npm run typecheck   # TypeScript 타입 검사
 - `WiltingChecker`는 물주기와 실행 시점·변경 이유가 달라 별도 모듈이다.
 - DB 종류, 푸시 서비스 종류는 데이터 계층 구현 안에 숨긴다. 로직 계층은 인터페이스만 안다.
 - `App.tsx`는 계층을 조립하는 시작점이라 예외적으로 데이터 계층(DB 초기화)을 직접 부른다. 화면 파일은 그러면 안 된다.
+
+## 화면 구성 (피그마 시안 반영)
+
+- `App.tsx`의 `route`로 화면을 바꾼다: `main`(메인 나무) → `activity`(활동 5종) / `records`(내 기록) / `complete`(나무 완성)
+- 메인 `TreeScreen`: 상태 카드·물 게이지, 나무 그림(다 자라면 열매 나무 `FruitTree`), 오늘 활동, 활동 고르기 시트, 열매 팝업 `FruitPopup`, 시듦 안내 창. ◀ ▶로 지난 나무를 본다
+- 활동 화면은 `presentation/activity/`(`WalkScreen`, `MeditationScreen`, `WritingScreen`, `SleepScreen`)에 두고 `ActivityScreen`이 고른다
+- `RecordsScreen`(내 기록)은 나의 나무 + `HistoryScreen`(기록 조회) + `ReminderScreen`(알림 설정) + `PastRecordsScreen`(지난 기록)을 한 화면에 모은다
+- 화면에 보여줄 글자·수치 계산은 React 없이 테스트할 수 있게 `*View.ts`(`mainView`, `activityView`, `fruitView`, `historyView`, `treeHistoryView`)로 나눈다
+- 공통 부품·색·글자 크기는 `presentation/ui/`(`theme.ts`가 시안 색 값). 색은 화면 파일에 직접 쓰지 않고 `theme.ts`에 이름을 붙여 쓴다
+- 그림: 시안 SVG 원본은 `src/assets/design/`, 앱이 쓰는 문자열은 `node assets/design/build-svg-module.mjs`로 `presentation/ui/svgs.ts`를 만든다 (직접 고치지 않는다). 나무 그림은 단계마다 자라는 모습(`tree/1-seed.svg`~`5-tree.svg`)과 시든 모습(`tree/wilted-1-seed.svg`~`wilted-5-tree.svg`)이 있다
+- 개발 중(`__DEV__`)에만 내 기록 아래에 체험용 기록 넣기·모두 지우기(`data/demoData.ts`, `DevToolsCard`)가 보인다
 
 ## 데이터 저장: 기기 내 SQLite
 

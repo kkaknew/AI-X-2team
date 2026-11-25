@@ -1,8 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, type ComponentType } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, BackHandler, StyleSheet, View } from 'react-native';
 
 import { describeDatabase, getActivityType, openAppDatabase, openLocalDatabase } from './data/database';
+import { makeWilted, resetAllData, seedDemoData, setWater } from './data/demoData';
 import { ExpoLocationRepository } from './data/ExpoLocationRepository';
 import { ExpoMeditationPlayer } from './data/ExpoMeditationPlayer';
 import { ExpoPushClient } from './data/ExpoPushClient';
@@ -17,26 +18,32 @@ import { ReminderService } from './logic/ReminderService';
 import { StatsService } from './logic/StatsService';
 import { WateringEngine } from './logic/WateringEngine';
 import { WiltingChecker } from './logic/WiltingChecker';
-import ActivityScreen, { type ActivityScreenProps } from './presentation/ActivityScreen';
-import HistoryScreen, { type HistoryScreenProps } from './presentation/HistoryScreen';
-import ReminderScreen, { type ReminderScreenProps } from './presentation/ReminderScreen';
-import TreeScreen, { type TreeScreenProps } from './presentation/TreeScreen';
+import type { ActivityCode } from './logic/ActivityRecorder';
+import ActivityScreen from './presentation/ActivityScreen';
+import CompletionScreen from './presentation/CompletionScreen';
+import RecordsScreen from './presentation/RecordsScreen';
+import type { DevTools } from './presentation/DevToolsCard';
+import TreeScreen from './presentation/TreeScreen';
+import { colors } from './presentation/ui';
 
-/** 모든 화면에 같은 로직 객체를 넘긴다. 쓰지 않는 화면은 무시한다 */
-type ScreenProps = TreeScreenProps & ActivityScreenProps & HistoryScreenProps & ReminderScreenProps;
-
-/** 산책 중 탭을 옮겨도 산책이 이어지도록 위치 저장소는 앱 전체에서 하나만 쓴다 */
+/** 산책 중 화면을 옮겨도 산책이 이어지도록 위치 저장소는 앱 전체에서 하나만 쓴다 */
 const location = new ExpoLocationRepository();
 
 /** 명상 음악 재생기도 하나만 쓴다. 두 곡이 겹쳐 재생되지 않게 */
 const meditation = new MeditationSession({ player: new ExpoMeditationPlayer() });
 
-const TABS: { key: string; label: string; Screen: ComponentType<ScreenProps> }[] = [
-  { key: 'tree', label: '나무', Screen: TreeScreen },
-  { key: 'activity', label: '활동 기록', Screen: ActivityScreen },
-  { key: 'history', label: '기록 조회', Screen: HistoryScreen },
-  { key: 'reminder', label: '알림', Screen: ReminderScreen },
-];
+/**
+ * 지금 보이는 화면. 시안대로 하단 탭 없이 메인(나의 나무)에서 들어간다.
+ * - main: treeId가 있으면 그 지난 나무를 본다 (◀ ▶, 내 기록의 나의 나무)
+ * - activity: 메인의 오늘의 활동·활동 보기에서 (고른 활동으로 연다)
+ * - records: 메인의 프로필 버튼에서 (나의 나무·기록 조회·알림 설정)
+ * - complete: 다 자란 나무의 [새 씨앗 심기]에서 (나무 완성 화면)
+ */
+type Route =
+  | { name: 'main'; treeId: number | null }
+  | { name: 'activity'; activity: ActivityCode }
+  | { name: 'records' }
+  | { name: 'complete' };
 
 /**
  * 시듦 판정(#17)을 돌린다. 앱을 켤 때, 앱을 다시 앞으로 가져올 때, 물을 받았을 때.
@@ -48,9 +55,12 @@ function startWiltingWatch(
   watering: WateringEngine,
   checker: WiltingChecker,
   reminders: ReminderService,
+  /** 판정할 때마다 시들 때까지 남은 시간을 알린다 (메인의 시듦 안내 창) */
+  onState: (remainingMs: number | null) => void,
 ): () => void {
   const sync = async () => {
     const state = await checker.check();
+    onState(state ? state.remainingMs : null);
     if (state?.wiltedNow) await watering.refresh();
     await reminders.syncWiltWarning(state);
   };
@@ -70,15 +80,21 @@ function startWiltingWatch(
 }
 
 /**
- * 앱 시작점. 하단 탭으로 세 화면을 오간다.
+ * 앱 시작점. 메인(나의 나무)에서 활동 기록·내 기록으로 들어갔다 돌아온다.
  * App.tsx는 계층을 조립하는 곳이라 데이터 계층(DB 초기화)을 직접 불러도 된다.
  */
 export default function App() {
-  const [index, setIndex] = useState(0);
+  const [route, setRoute] = useState<Route>({ name: 'main', treeId: null });
+  /** 시들 때까지 남은 시간 (ms). 모르면 null */
+  const [wiltRemainingMs, setWiltRemainingMs] = useState<number | null>(null);
   const [engine, setEngine] = useState<WateringEngine | null>(null);
   const [recorder, setRecorder] = useState<ActivityRecorder | null>(null);
   const [reminders, setReminders] = useState<ReminderService | null>(null);
   const [stats, setStats] = useState<StatsService | null>(null);
+  /** 개발 중에만: 체험용 기록 넣기·모두 지우기 (내 기록 화면) */
+  const [devTools, setDevTools] = useState<DevTools | undefined>(undefined);
+  /** 체험 데이터로 기록이 통째로 바뀌면 늘린다 (화면을 새로 읽게) */
+  const [dataVersion, setDataVersion] = useState(0);
 
   useEffect(() => {
     let stopWilting: (() => void) | null = null;
@@ -111,54 +127,105 @@ export default function App() {
         reminderService
           .restore()
           .catch((e) => console.error('[알림] 물주기 알림을 다시 예약하지 못했습니다', e));
-        stopWilting = startWiltingWatch(watering, new WiltingChecker(trees), reminderService);
+        stopWilting = startWiltingWatch(
+          watering,
+          new WiltingChecker(trees),
+          reminderService,
+          setWiltRemainingMs,
+        );
+
+        if (__DEV__) {
+          const after = async () => {
+            await watering.refresh();
+            setDataVersion((v) => v + 1);
+          };
+          setDevTools({
+            seed: async () => {
+              await seedDemoData(db, localDb);
+              await after();
+            },
+            reset: async () => {
+              await resetAllData(db, localDb);
+              await after();
+            },
+            setWater: async (amount) => {
+              await setWater(db, amount);
+              await after();
+            },
+            wilt: async () => {
+              await makeWilted(db);
+              await after();
+            },
+          });
+        }
       })
       .catch((e) => console.error('[DB] 물주기 엔진 준비 실패', e));
     return () => stopWilting?.();
   }, []);
-  const { Screen } = TABS[index];
+
+  // 안드로이드 뒤로 가기: 메인이 아니면 메인으로 (지난 나무를 보는 중이면 지금 나무로)
+  useEffect(() => {
+    if (route.name === 'main' && route.treeId === null) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setRoute({ name: 'main', treeId: null });
+      return true;
+    });
+    return () => sub.remove();
+  }, [route]);
+
+  const goMain = useCallback(() => setRoute({ name: 'main', treeId: null }), []);
 
   return (
     <View style={styles.container}>
-      <View style={styles.body}>
-        <Screen
+      {route.name === 'main' && (
+        <TreeScreen
+          key={dataVersion}
           engine={engine}
+          stats={stats}
+          recorder={recorder}
+          onOpenActivity={(activity) => setRoute({ name: 'activity', activity: activity ?? 'walk' })}
+          onOpenRecords={() => setRoute({ name: 'records' })}
+          onOpenComplete={() => setRoute({ name: 'complete' })}
+          viewTreeId={route.treeId}
+          onViewTree={(treeId) => setRoute({ name: 'main', treeId })}
+          wiltRemainingMs={wiltRemainingMs}
+        />
+      )}
+      {route.name === 'complete' && (
+        <CompletionScreen engine={engine} stats={stats} onPlanted={goMain} onLater={goMain} />
+      )}
+      {route.name === 'activity' && (
+        <ActivityScreen
+          activity={route.activity}
           recorder={recorder}
           meditation={meditation}
-          stats={stats}
-          reminders={reminders}
+          onClose={goMain}
         />
-      </View>
-      <View style={styles.tabBar}>
-        {TABS.map((tab, i) => (
-          <Pressable
-            key={tab.key}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: i === index }}
-            onPress={() => setIndex(i)}
-            style={styles.tab}
-          >
-            <Text style={[styles.tabLabel, i === index && styles.tabLabelActive]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      )}
+      {route.name === 'records' && (
+        <RecordsScreen
+          stats={stats}
+          engine={engine}
+          reminders={reminders}
+          recorder={recorder}
+          devTools={devTools}
+          dataVersion={dataVersion}
+          onClose={goMain}
+          onOpenTree={(treeId) =>
+            // 지금 나무를 누르면 그냥 메인으로
+            engine
+              ?.getProgress()
+              .then((p) => setRoute({ name: 'main', treeId: p?.treeId === treeId ? null : treeId }))
+              .catch(() => setRoute({ name: 'main', treeId }))
+          }
+        />
+      )}
       <StatusBar style="dark" />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff', paddingTop: 48 },
+  container: { flex: 1, backgroundColor: colors.background, paddingTop: 48 },
   body: { flex: 1 },
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#cccccc',
-    paddingBottom: 24,
-  },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  tabLabel: { fontSize: 14, color: '#888888' },
-  tabLabelActive: { color: '#2f7d4f', fontWeight: '600' },
 });

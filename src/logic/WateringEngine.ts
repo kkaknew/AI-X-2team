@@ -64,6 +64,10 @@ export interface TreeProgress {
   nextStage: GrowthStage | null;
   /** 다음 단계까지 남은 물. 마지막 단계면 0 */
   waterToNextStage: number;
+  /** 씨앗을 심은 시각 (ISO). 메인 화면 "나무 N · 키우는 중", 이 나무의 열매 계산에 쓴다 */
+  plantedAt: string;
+  /** 마지막으로 물을 받은 시각 (ISO). 아직 없으면 null. 시든 나무의 "N일째 기록이 없어요"에 쓴다 */
+  lastWateredAt: string | null;
 }
 
 export type TreeProgressListener = (progress: TreeProgress) => void;
@@ -92,7 +96,13 @@ function sortStages(stages: GrowthStage[]): GrowthStage[] {
 
 /** @param sortedStages sortStages()로 정렬한 단계 */
 function progressOf(
-  tree: { id: number; status: TreeStatus; waterTotal: number },
+  tree: {
+    id: number;
+    status: TreeStatus;
+    waterTotal: number;
+    plantedAt: string;
+    lastWateredAt: string | null;
+  },
   sortedStages: GrowthStage[],
 ): TreeProgress {
   const stage = stageForWater(tree.waterTotal, sortedStages);
@@ -108,6 +118,8 @@ function progressOf(
     isFinalStage: nextStage === null,
     nextStage,
     waterToNextStage: nextStage ? nextStage.waterRequired - tree.waterTotal : 0,
+    plantedAt: tree.plantedAt,
+    lastWateredAt: tree.lastWateredAt,
   };
 }
 
@@ -177,7 +189,8 @@ export class WateringEngine {
       });
     }
 
-    const progress = progressOf({ ...tree, waterTotal, status }, stages);
+    const lastWateredAt = waterGiven > 0 ? at.toISOString() : tree.lastWateredAt;
+    const progress = progressOf({ ...tree, waterTotal, status, lastWateredAt }, stages);
     if (waterGiven > 0) this.notify(progress);
 
     return {

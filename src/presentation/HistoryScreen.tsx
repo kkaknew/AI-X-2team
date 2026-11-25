@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import type { StatsService } from '../logic/StatsService';
 import type { WateringEngine } from '../logic/WateringEngine';
-import { toHistoryView, type ActivityItem, type HistoryView } from './historyView';
+import { toHistoryView, type HistoryView } from './historyView';
+import { dots } from './treeHistoryView';
+import { colors, ErrorMessage, fontSize, Loading, radius, weight } from './ui';
 
 export interface HistoryScreenProps {
   /** DB를 여는 동안은 null */
@@ -13,13 +15,13 @@ export interface HistoryScreenProps {
 }
 
 /**
- * 표현 계층: 일·주간 활동 횟수와 받은 물의 양을 보여준다. (#14 [12] 기록 조회 화면)
+ * 표현 계층: 일·주간 활동 횟수와 받은 물의 양. (#14 [12] 기록 조회 화면)
+ * 시안 "내 기록"의 "기록 조회" 카드: 오늘 인증·오늘 받은 물, 최근 7일 날짜별 횟수(점)와 물.
  * 집계 규칙(무엇을 세는지, 어느 날로 세는지)은 StatsService가 정한다.
  */
 export default function HistoryScreen({ stats, engine }: HistoryScreenProps) {
   const [view, setView] = useState<HistoryView | null>(null);
   const [error, setError] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!stats) return;
@@ -39,124 +41,76 @@ export default function HistoryScreen({ stats, engine }: HistoryScreenProps) {
   // 다른 화면에서 활동을 인증해 물을 받으면 다시 집계한다
   useEffect(() => engine?.subscribe(() => void load()), [engine, load]);
 
-  const refresh = () => {
-    setRefreshing(true);
-    load().finally(() => setRefreshing(false));
-  };
-
-  if (!view) {
-    return (
-      <View style={styles.center}>
-        {error ? (
-          <Text style={styles.muted}>기록을 불러오지 못했어요</Text>
-        ) : (
-          <ActivityIndicator color={GREEN} />
-        )}
-      </View>
-    );
-  }
-
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-    >
-      <Text style={styles.title}>기록 조회</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>오늘</Text>
-        <Summary count={view.today.count} water={view.today.water} />
-        <Items items={view.today.items} />
+    <View style={styles.card}>
+      <View style={styles.head}>
+        <Text style={styles.title}>기록 조회</Text>
+        <View style={styles.chip}>
+          <Text style={styles.chipText}>최근 7일</Text>
+        </View>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>최근 7일</Text>
-        <Summary count={view.week.count} water={view.week.water} />
-        <Items items={view.week.items} />
+      {error && <ErrorMessage message="기록을 불러오지 못했어요" variant="card" />}
+      {!view && !error && <Loading />}
+      {view && (
+        <>
+          <View style={styles.summary}>
+            <View style={styles.box}>
+              <Text style={styles.boxLabel}>오늘 인증</Text>
+              <Text style={styles.boxValue}>{view.today.count}회</Text>
+            </View>
+            <View style={styles.box}>
+              <Text style={styles.boxLabel}>오늘 받은 물</Text>
+              <Text style={styles.boxValue}>{view.today.water.toLocaleString()}</Text>
+            </View>
+          </View>
 
-        <View style={styles.days}>
-          {view.week.days.map((d) => (
-            <View key={d.label} style={styles.dayRow}>
-              <Text style={styles.dayLabel}>{d.label}</Text>
-              <View style={styles.bar}>
-                <View style={[styles.barFill, { width: `${d.ratio * 100}%` }]} />
+          {view.week.days.map((d, i) => (
+            <View key={d.date} style={[styles.row, i > 0 && styles.rowLine]}>
+              <View style={styles.day}>
+                <Text style={styles.dayName}>{d.short}</Text>
+                <Text style={styles.dayDate}>{d.date}</Text>
               </View>
-              <Text style={styles.dayValue}>
-                {d.count}번 · 💧{d.water}
-              </Text>
+              <View style={styles.dots} accessibilityLabel={`${d.label} ${d.count}회`}>
+                {dots(d.count).map((on, j) => (
+                  <View key={j} style={[styles.dot, on && styles.dotOn]} />
+                ))}
+              </View>
+              <Text style={styles.count}>{d.count}회</Text>
+              <Text style={styles.water}>물 {d.water.toLocaleString()}</Text>
             </View>
           ))}
-        </View>
-      </View>
-
-      <Text style={styles.note}>
-        인증된 활동만 횟수에 들어가요. 하루 한 번 물을 받은 뒤의 활동은 물 0으로 셉니다.
-        {'\n'}산책은 아직 기록이 저장되지 않아 집계에서 빠져 있어요.
-      </Text>
-    </ScrollView>
-  );
-}
-
-function Summary({ count, water }: { count: number; water: number }) {
-  return (
-    <View style={styles.summary}>
-      <View style={styles.summaryBox}>
-        <Text style={styles.summaryValue}>{count}번</Text>
-        <Text style={styles.muted}>인증한 활동</Text>
-      </View>
-      <View style={styles.summaryBox}>
-        <Text style={[styles.summaryValue, styles.water]}>💧 {water}</Text>
-        <Text style={styles.muted}>받은 물</Text>
-      </View>
+        </>
+      )}
     </View>
   );
 }
-
-function Items({ items }: { items: ActivityItem[] }) {
-  return (
-    <View style={styles.items}>
-      {items.map((item) => (
-        <View key={item.label} style={[styles.item, item.count === 0 && styles.dim]}>
-          <Text style={styles.itemEmoji}>{item.emoji}</Text>
-          <Text style={styles.itemLabel}>{item.label}</Text>
-          <Text style={styles.itemCount}>{item.count}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-const GREEN = '#2f7d4f';
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  container: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 20, fontWeight: '700', marginBottom: 16, color: '#1d1d1d' },
-  card: { borderRadius: 14, backgroundColor: '#f6f6f6', padding: 16, marginBottom: 16 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#1d1d1d', marginBottom: 12 },
-  summary: { flexDirection: 'row', marginBottom: 12 },
-  summaryBox: { flex: 1, alignItems: 'center' },
-  summaryValue: { fontSize: 26, fontWeight: '700', color: GREEN },
-  water: { color: '#2b6cb0' },
-  items: { flexDirection: 'row', justifyContent: 'space-between' },
-  item: {
-    flex: 1,
-    marginHorizontal: 3,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
+  card: {
+    gap: 10,
+    padding: 16,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
-  dim: { opacity: 0.45 },
-  itemEmoji: { fontSize: 20 },
-  itemLabel: { fontSize: 12, color: '#555555', marginTop: 2 },
-  itemCount: { fontSize: 16, fontWeight: '700', color: '#1d1d1d' },
-  days: { marginTop: 16 },
-  dayRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 4 },
-  dayLabel: { width: 76, fontSize: 13, color: '#555555' },
-  bar: { flex: 1, height: 10, borderRadius: 5, backgroundColor: '#e3e8e4', overflow: 'hidden' },
-  barFill: { height: '100%', backgroundColor: GREEN },
-  dayValue: { width: 76, textAlign: 'right', fontSize: 13, color: '#333333' },
-  muted: { fontSize: 13, color: '#888888' },
-  note: { fontSize: 12, lineHeight: 18, color: '#888888' },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: fontSize.cardTitle, fontWeight: weight.bold, color: colors.text },
+  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.surfaceMuted },
+  chipText: { fontSize: 11, fontWeight: weight.bold, color: colors.textSubtle },
+  summary: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  box: { flex: 1, gap: 2, padding: 12, borderRadius: radius.inner, backgroundColor: colors.surfaceMuted },
+  boxLabel: { fontSize: fontSize.caption, color: colors.textMuted },
+  boxValue: { fontSize: fontSize.headline, fontWeight: weight.bold, color: colors.text },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
+  rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  day: { width: 52 },
+  dayName: { fontSize: fontSize.small, fontWeight: weight.bold, color: colors.text },
+  dayDate: { fontSize: 10, color: colors.textMuted },
+  dots: { flex: 1, flexDirection: 'row', gap: 4 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.surfaceMuted },
+  dotOn: { backgroundColor: colors.brown },
+  count: { width: 36, fontSize: fontSize.small, color: colors.text },
+  water: { minWidth: 64, textAlign: 'right', fontSize: fontSize.small, fontWeight: weight.bold, color: colors.text },
 });
